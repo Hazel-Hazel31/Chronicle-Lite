@@ -156,6 +156,48 @@
   .bundle-head .btoggle,.bundle-head .bdel{border:none;background:none;cursor:pointer;color:var(--graphite);font-size:13px;padding:2px;}
   .bundle-head .bdel:hover{color:var(--danger);}
   .bundle.expanded{background:rgba(120,120,120,0.06);border-style:solid;min-width:240px;min-height:110px;}
+  .bundle-body{display:flex;flex-direction:column;gap:5px;padding:4px 8px 8px;overflow:auto;max-height:calc(100% - 36px);}
+  .bmember{display:flex;align-items:center;gap:7px;background:var(--paper);border:1px solid var(--hair);
+    border-left:3px solid var(--upcoming);border-radius:0 7px 7px 0;padding:5px 8px;font-size:12.5px;}
+  .bmember.live{border-left-color:var(--live);background:var(--live-soft);}
+  .bmember.done{border-left-color:var(--done);opacity:.8;}
+  .bmember .bm-tick{flex:0 0 13px;height:13px;border-radius:4px;border:1.5px solid var(--graphite);cursor:pointer;}
+  .bmember.done .bm-tick{background:var(--done);border-color:var(--done);}
+  .bmember .bm-text{flex:1;cursor:pointer;}
+  .bmember.done .bm-text{text-decoration:line-through;color:var(--graphite);}
+  .bmember .bm-out{border:none;background:none;cursor:pointer;color:var(--graphite);font-size:12px;}
+  .bresize{position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;
+    background:linear-gradient(135deg,transparent 50%,var(--graphite) 50%);border-radius:0 0 8px 0;opacity:.5;}
+
+  .cnote{position:absolute;background:var(--card);border:1px solid var(--hair);border-radius:10px;z-index:3;
+    box-shadow:0 6px 16px -10px var(--shadow);overflow:hidden;min-width:120px;}
+  .cnote .note-bar{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:var(--paper-deep);}
+  .cnote .note-grip{cursor:grab;color:var(--graphite);font-size:12px;user-select:none;}
+  .cnote .note-del{border:none;background:none;cursor:pointer;color:var(--graphite);font-size:15px;line-height:1;}
+  .cnote .note-del:hover{color:var(--danger);}
+  .cnote.dragging{opacity:.9;z-index:7;}
+  .note-text{padding:9px 11px;font-size:13px;outline:none;min-height:40px;white-space:pre-wrap;word-break:break-word;}
+  .note-link{display:block;padding:9px 11px;font-size:13px;color:var(--soon);text-decoration:none;word-break:break-all;}
+  .note-link:hover{text-decoration:underline;}
+  .note-img{display:block;width:100%;height:auto;}
+  .note-file{display:flex;gap:6px;align-items:center;padding:11px;font-size:13px;color:var(--ink);text-decoration:none;}
+  .note-file:hover{color:var(--soon);}
+
+  .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .month-dayname{font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--graphite);
+    text-align:center;padding:4px 0;}
+  .month-cell{min-height:96px;border:1px solid var(--hair);border-radius:8px;background:var(--card);padding:5px;
+    display:flex;flex-direction:column;gap:3px;overflow:hidden;}
+  .month-cell.empty{background:transparent;border:none;}
+  .month-cell.is-today{border-color:var(--live);box-shadow:0 0 0 2px var(--live-soft);}
+  .month-cell .mc-date{font-family:var(--mono);font-size:12px;color:var(--graphite);cursor:pointer;align-self:flex-start;}
+  .month-cell.is-today .mc-date{color:var(--live);font-weight:600;}
+  .mc-item{font-size:10.5px;padding:2px 5px;border-radius:4px;border-left:2px solid var(--upcoming);background:var(--paper);
+    cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;}
+  .mc-item.done{text-decoration:line-through;opacity:.6;}
+  .mc-item.mc-evt{background:rgba(122,108,174,0.13);border-left-color:#7a6cae;color:#3c3489;}
+  .mc-more{font-family:var(--mono);font-size:9.5px;color:var(--graphite);cursor:pointer;padding-left:5px;}
+  .mc-more:hover{color:var(--live);}
   .canvas-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
     gap:10px;color:var(--graphite);font-family:var(--mono);font-size:13px;pointer-events:none;z-index:1;}
 
@@ -370,6 +412,7 @@
     <button data-view="projects" class="active">Projects</button>
     <button data-view="day">Day</button>
     <button data-view="week">Week</button>
+    <button data-view="month">Month</button>
   </nav>
   <div class="spacer"></div>
   <div class="sync" id="syncPill"><span class="led"></span><span id="syncText">starting</span></div>
@@ -427,7 +470,7 @@ function urgencyLabel(t){
   return "in "+days+"d";
 }
 
-function emptyLocal(){return{projects:{},tasks:{},categories:{},arrows:{},events:{},bundles:{},view:"projects",cursorDate:todayISO(),openProject:null,calMode:"calendar",catFilter:[],catSort:false,viewports:{},lastPull:0};}
+function emptyLocal(){return{projects:{},tasks:{},categories:{},arrows:{},events:{},bundles:{},notes:{},view:"projects",cursorDate:todayISO(),openProject:null,calMode:"calendar",catFilter:[],catSort:false,viewports:{},lastPull:0};}
 let db=loadLocal();
 function loadLocal(){
   try{
@@ -435,7 +478,7 @@ function loadLocal(){
     if(!raw) return migrateOrSeed();
     const s=JSON.parse(raw);
     s.projects=s.projects||{};s.tasks=s.tasks||{};s.categories=s.categories||{};s.arrows=s.arrows||{};
-    s.events=s.events||{};s.bundles=s.bundles||{};s.viewports=s.viewports||{};
+    s.events=s.events||{};s.bundles=s.bundles||{};s.viewports=s.viewports||{};s.notes=s.notes||{};
     s.view=s.view||"projects";
     s.cursorDate=s.cursorDate||todayISO();s.lastPull=s.lastPull||0;s.openProject=s.openProject||null;
     s.calMode=s.calMode||"calendar";s.catFilter=s.catFilter||[];s.catSort=s.catSort||false;
@@ -447,7 +490,7 @@ function migrateOrSeed(){
   for(const k of ["totem.sync.v2","totem.sync.v1"]){
     try{const old=localStorage.getItem(k);
       if(old){const s=JSON.parse(old);s.openProject=null;s.categories=s.categories||{};s.arrows=s.arrows||{};
-        s.events=s.events||{};s.bundles=s.bundles||{};s.viewports=s.viewports||{};
+        s.events=s.events||{};s.bundles=s.bundles||{};s.viewports=s.viewports||{};s.notes=s.notes||{};
         s.calMode=s.calMode||"calendar";s.catFilter=[];s.catSort=false;return s;}
     }catch(e){}
   }
@@ -508,7 +551,7 @@ const bundlesOf=pid=>Object.values(db.bundles).filter(b=>!b.deleted&&b.project_i
 const bundleById=id=>db.bundles[id];
 function newBundle(pid,name,taskIds,x,y){const id=uid();
   db.bundles[id]={id,project_id:pid,name:name||"Bundle",task_ids:taskIds||[],collapsed:true,
-    x:x??60,y:y??60,updated_at:now(),deleted:false};
+    x:x??60,y:y??60,w:280,h:200,updated_at:now(),deleted:false};
   // mark member tasks as bundled
   (taskIds||[]).forEach(tid=>{if(db.tasks[tid]){db.tasks[tid].bundle_id=id;db.tasks[tid].updated_at=now();}});
   persist();pushSoon();return id;}
@@ -520,6 +563,31 @@ function addToBundle(b,tid){if(!b.task_ids.includes(tid)){b.task_ids.push(tid);b
 function removeFromBundle(b,tid){b.task_ids=b.task_ids.filter(x=>x!==tid);b.updated_at=now();
   if(db.tasks[tid]){db.tasks[tid].bundle_id=null;db.tasks[tid].updated_at=now();}persist();pushSoon();}
 function touchBundle(b){b.updated_at=now();persist();render();pushSoon();}
+
+/* canvas notes: text / link / image / file blocks placed on a project canvas */
+const notesOf=pid=>Object.values(db.notes).filter(n=>!n.deleted&&n.project_id===pid);
+const noteById=id=>db.notes[id];
+function newNote(pid,kind,x,y,extra){const id=uid();
+  db.notes[id]={id,project_id:pid,kind:kind||"text",text:(extra&&extra.text)||"",url:(extra&&extra.url)||"",
+    filename:(extra&&extra.filename)||"",x:x??80,y:y??80,w:(extra&&extra.w)||220,h:(extra&&extra.h)||120,
+    updated_at:now(),deleted:false};
+  persist();pushSoon();return id;}
+function delNote(n){n.deleted=true;n.updated_at=now();persist();pushSoon();}
+function touchNote(n){n.updated_at=now();persist();render();pushSoon();}
+
+/* Supabase Storage upload → returns public URL */
+const STORAGE_BUCKET="chronicle";
+async function uploadFile(file){
+  const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+  const path=Date.now()+"_"+Math.random().toString(36).slice(2,7)+"_"+safe;
+  const res=await fetch(SUPABASE_URL+"/storage/v1/object/"+STORAGE_BUCKET+"/"+encodeURIComponent(path),{
+    method:"POST",
+    headers:{"apikey":SUPABASE_ANON,"Authorization":"Bearer "+SUPABASE_ANON,"Content-Type":file.type||"application/octet-stream"},
+    body:file
+  });
+  if(!res.ok)throw new Error("upload "+res.status+" "+(await res.text()).slice(0,120));
+  return SUPABASE_URL+"/storage/v1/object/public/"+STORAGE_BUCKET+"/"+encodeURIComponent(path);
+}
 
 function touchProject(p){p.updated_at=now();persist();render();pushSoon();}
 function touchTask(t){t.updated_at=now();persist();render();pushSoon();}
@@ -572,11 +640,15 @@ async function syncNow(){
     await upsert("events",eRows);
     const bRows=Object.values(db.bundles).map(b=>({id:b.id,project_id:b.project_id??null,name:b.name??"",
       task_ids:JSON.stringify(b.task_ids||[]),collapsed:!!b.collapsed,x:Math.round(b.x??60),y:Math.round(b.y??60),
-      updated_at:b.updated_at??now(),deleted:!!b.deleted}));
+      w:Math.round(b.w??280),h:Math.round(b.h??200),updated_at:b.updated_at??now(),deleted:!!b.deleted}));
     await upsert("bundles",bRows);
+    const nRows=Object.values(db.notes).map(n=>({id:n.id,project_id:n.project_id??null,kind:n.kind??"text",
+      text:n.text??"",url:n.url??"",filename:n.filename??"",x:Math.round(n.x??80),y:Math.round(n.y??80),
+      w:Math.round(n.w??220),h:Math.round(n.h??120),updated_at:n.updated_at??now(),deleted:!!n.deleted}));
+    await upsert("notes",nRows);
     const since=db.lastPull||0;
-    const[sp,st,sc,sa,se,sb]=await Promise.all([pull("projects",since),pull("tasks",since),
-      pull("categories",since),pull("arrows",since),pull("events",since),pull("bundles",since)]);
+    const[sp,st,sc,sa,se,sb,sn]=await Promise.all([pull("projects",since),pull("tasks",since),
+      pull("categories",since),pull("arrows",since),pull("events",since),pull("bundles",since),pull("notes",since)]);
     let changed=false,maxTs=since;
     const merge=(store,row)=>{maxTs=Math.max(maxTs,row.updated_at||0);const cur=store[row.id];
       if(!cur||(row.updated_at||0)>(cur.updated_at||0)){store[row.id]=row;changed=true;}};
@@ -587,7 +659,8 @@ async function syncNow(){
     se.forEach(r=>merge(db.events,r));
     sb.forEach(r=>{const norm={id:r.id,project_id:r.project_id,name:r.name,
       task_ids:(()=>{try{return JSON.parse(r.task_ids||"[]")}catch(e){return[]}})(),
-      collapsed:r.collapsed,x:r.x,y:r.y,updated_at:r.updated_at,deleted:r.deleted};merge(db.bundles,norm);});
+      collapsed:r.collapsed,x:r.x,y:r.y,w:r.w,h:r.h,updated_at:r.updated_at,deleted:r.deleted};merge(db.bundles,norm);});
+    sn.forEach(r=>merge(db.notes,r));
     db.lastPull=maxTs;persist();
     if(changed&&!dragging)render();
     setSync("online","synced");
@@ -604,6 +677,7 @@ function render(){
   if(db.openProject&&projById(db.openProject)&&!projById(db.openProject).deleted){renderDetail();}
   else if(db.view==="projects")renderProjects();
   else if(db.view==="day")renderDay();
+  else if(db.view==="month")renderMonth();
   else renderWeek();
   persist();
 }
@@ -751,7 +825,16 @@ function renderDetail(){
   tidyBtn.addEventListener("click",()=>tidy(p.id));
   const catBundleBtn=document.createElement("button");catBundleBtn.textContent="bundle by category";
   catBundleBtn.addEventListener("click",()=>bundleByCategory(p.id));
-  tools.append(addBtn,arrowBtn,catBtn,catBundleBtn,tidyBtn);wrap.appendChild(tools);
+  const textBtn=document.createElement("button");textBtn.textContent="+ text";
+  textBtn.addEventListener("click",()=>{newNote(p.id,"text",100,100,{text:"Note…"});render();});
+  const linkBtn=document.createElement("button");linkBtn.textContent="+ link";
+  linkBtn.addEventListener("click",()=>{const url=prompt("Link URL");if(url){const label=prompt("Label (optional)",url)||url;
+    newNote(p.id,"link",100,100,{url,text:label});render();}});
+  const imgBtn=document.createElement("button");imgBtn.textContent="+ image";
+  imgBtn.addEventListener("click",()=>pickAndUpload(p.id,"image"));
+  const fileBtn=document.createElement("button");fileBtn.textContent="+ file";
+  fileBtn.addEventListener("click",()=>pickAndUpload(p.id,"file"));
+  tools.append(addBtn,arrowBtn,catBtn,catBundleBtn,textBtn,linkBtn,imgBtn,fileBtn,tidyBtn);wrap.appendChild(tools);
 
   const layoutRow=document.createElement("div");layoutRow.className="canvas-row";
   const canvas=document.createElement("div");canvas.className="canvas";canvas.id="canvas";
@@ -783,10 +866,11 @@ function renderDetail(){
   bundlesOf(p.id).forEach(b=>world.appendChild(bundleEl(b,p)));
   allPlaced.forEach(t=>{if(collapsedBundleIds.has(t.id))return;world.appendChild(cardEl(t,p));});
   eventsOfProject(p.id).forEach((ev,i)=>world.appendChild(eventCardEl(ev,i)));
+  notesOf(p.id).forEach(n=>world.appendChild(noteEl(n,p)));
 
   canvas.appendChild(world);
   const zc=document.createElement("div");zc.className="zoomctl";
-  zc.innerHTML=`<button data-z="out">−</button><input type="range" min="30" max="160" value="${Math.round((vpOf(p.id).z)*100)}"><button data-z="in">+</button><button data-z="fit" title="reset">⊡</button>`;
+  zc.innerHTML=`<button data-z="out">−</button><input type="range" min="45" max="160" value="${Math.round((vpOf(p.id).z)*100)}"><button data-z="in">+</button><button data-z="fit" title="reset">⊡</button>`;
   zc.querySelector('[data-z="out"]').addEventListener("click",()=>setZoom(p.id,vpOf(p.id).z-0.15));
   zc.querySelector('[data-z="in"]').addEventListener("click",()=>setZoom(p.id,vpOf(p.id).z+0.15));
   zc.querySelector('[data-z="fit"]').addEventListener("click",()=>fitView(p.id));
@@ -850,15 +934,38 @@ function eventCardEl(ev,i){
 function bundleEl(b,p){
   const c=document.createElement("div");c.className="bundle"+(b.collapsed?" collapsed":" expanded");c.id="bundle_"+b.id;
   c.style.left=(b.x??60)+"px";c.style.top=(b.y??60)+"px";
+  if(!b.collapsed){c.style.width=(b.w??280)+"px";c.style.height=(b.h??200)+"px";}
   const count=(b.task_ids||[]).filter(id=>db.tasks[id]&&!db.tasks[id].deleted).length;
   const doneN=(b.task_ids||[]).filter(id=>db.tasks[id]&&db.tasks[id].status==="done").length;
   c.innerHTML=`<div class="bundle-head"><span class="bname"></span><span class="bcount">${doneN}/${count}</span>
-    <button class="btoggle">${b.collapsed?"▸":"▾"}</button><button class="bdel" title="ungroup">⊗</button></div>`;
+    <button class="btoggle">${b.collapsed?"▸":"▾"}</button><button class="bdel" title="ungroup">⊗</button></div>
+    ${b.collapsed?"":'<div class="bundle-body"></div><div class="bresize" title="resize"></div>'}`;
   c.querySelector(".bname").textContent=b.name;
   c.querySelector(".bname").addEventListener("click",e=>{e.stopPropagation();const v=prompt("Rename bundle",b.name);if(v!==null){b.name=v||"Bundle";touchBundle(b);}});
   c.querySelector(".btoggle").addEventListener("click",e=>{e.stopPropagation();b.collapsed=!b.collapsed;touchBundle(b);});
   c.querySelector(".bdel").addEventListener("click",e=>{e.stopPropagation();if(confirm(`Ungroup "${b.name}"? Tasks stay, the bundle is removed.`)){delBundle(b);render();}});
-  const down=e=>{if(e.target.closest("button")||arrowFrom)return;e.preventDefault();e.stopPropagation();
+  // member task cards live visibly inside an expanded bundle
+  if(!b.collapsed){const body=c.querySelector(".bundle-body");
+    (b.task_ids||[]).forEach(tid=>{const t=db.tasks[tid];if(!t||t.deleted)return;
+      const mc=document.createElement("div");mc.className="bmember "+t.status;
+      mc.innerHTML=`<span class="bm-tick"></span><span class="bm-text"></span><button class="bm-out" title="remove from bundle">↗</button>`;
+      mc.querySelector(".bm-text").textContent=t.text;
+      mc.querySelector(".bm-text").addEventListener("click",e=>{e.stopPropagation();openTask(t.id);});
+      mc.querySelector(".bm-tick").addEventListener("click",e=>{e.stopPropagation();cycle(t);});
+      mc.querySelector(".bm-out").addEventListener("click",e=>{e.stopPropagation();removeFromBundle(b,tid);render();});
+      body.appendChild(mc);});
+    // resize handle
+    const rh=c.querySelector(".bresize");
+    rh.addEventListener("mousedown",e=>{e.preventDefault();e.stopPropagation();const z=vpOf(p.id).z;
+      const sx=e.clientX,sy=e.clientY,ow=b.w??280,oh=b.h??200;
+      const mv=ev=>{b.w=Math.max(180,ow+(ev.clientX-sx)/z);b.h=Math.max(120,oh+(ev.clientY-sy)/z);
+        c.style.width=b.w+"px";c.style.height=b.h+"px";};
+      const up=()=>{b.w=Math.round(b.w);b.h=Math.round(b.h);touchBundle(b);
+        document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);};
+      document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);});
+  }
+  const down=e=>{if(e.target.closest("button")||e.target.classList.contains("bresize")||e.target.closest(".bmember")||arrowFrom)return;
+    e.preventDefault();e.stopPropagation();
     const pt=e.touches?e.touches[0]:e;const z=vpOf(p.id).z;let sx=pt.clientX,sy=pt.clientY,ox=b.x??60,oy=b.y??60,moved=false;dragging=true;c.classList.add("dragging");
     const mv=e=>{const pt=e.touches?e.touches[0]:e;const dx=(pt.clientX-sx)/z,dy=(pt.clientY-sy)/z;
       if(Math.abs(dx)+Math.abs(dy)>3)moved=true;c.style.left=Math.max(0,ox+dx)+"px";c.style.top=Math.max(0,oy+dy)+"px";
@@ -872,13 +979,43 @@ function bundleEl(b,p){
   c.addEventListener("mousedown",down);c.addEventListener("touchstart",down,{passive:false});
   return c;
 }
+function noteEl(n,p){
+  const c=document.createElement("div");c.className="cnote "+n.kind;c.id="note_"+n.id;
+  c.style.left=(n.x??80)+"px";c.style.top=(n.y??80)+"px";c.style.width=(n.w??220)+"px";
+  let inner="";
+  if(n.kind==="text"){inner=`<div class="note-text" contenteditable spellcheck="false"></div>`;}
+  else if(n.kind==="link"){inner=`<a class="note-link" href="${esc(n.url)}" target="_blank" rel="noopener"></a>`;}
+  else if(n.kind==="image"){inner=`<img class="note-img" src="${esc(n.url)}" alt="">`;}
+  else if(n.kind==="file"){inner=`<a class="note-file" href="${esc(n.url)}" target="_blank" rel="noopener">📎 <span></span></a>`;}
+  c.innerHTML=`<div class="note-bar"><span class="note-grip">⠿</span><button class="note-del">×</button></div>${inner}`;
+  if(n.kind==="text"){const te=c.querySelector(".note-text");te.textContent=n.text||"Note…";
+    te.addEventListener("blur",()=>{n.text=te.textContent;touchNote(n);});}
+  if(n.kind==="link"){const a=c.querySelector(".note-link");a.textContent=n.text||n.url;}
+  if(n.kind==="file"){c.querySelector(".note-file span").textContent=n.filename||"file";}
+  c.querySelector(".note-del").addEventListener("click",e=>{e.stopPropagation();if(confirm("Delete this note?")){delNote(n);render();}});
+  // drag via grip
+  const grip=c.querySelector(".note-grip");
+  const down=e=>{e.preventDefault();e.stopPropagation();const pt=e.touches?e.touches[0]:e;const z=vpOf(p.id).z;
+    let sx=pt.clientX,sy=pt.clientY,ox=n.x??80,oy=n.y??80,moved=false;dragging=true;c.classList.add("dragging");
+    const mv=e=>{const pt=e.touches?e.touches[0]:e;const dx=(pt.clientX-sx)/z,dy=(pt.clientY-sy)/z;
+      if(Math.abs(dx)+Math.abs(dy)>3)moved=true;c.style.left=Math.max(0,ox+dx)+"px";c.style.top=Math.max(0,oy+dy)+"px";
+      n._nx=Math.max(0,ox+dx);n._ny=Math.max(0,oy+dy);if(e.cancelable)e.preventDefault();};
+    const up=()=>{dragging=false;c.classList.remove("dragging");
+      document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);
+      document.removeEventListener("touchmove",mv);document.removeEventListener("touchend",up);
+      if(moved){n.x=Math.round(n._nx);n.y=Math.round(n._ny);delete n._nx;delete n._ny;touchNote(n);}};
+    document.addEventListener("mousemove",mv);document.addEventListener("mouseup",up);
+    document.addEventListener("touchmove",mv,{passive:false});document.addEventListener("touchend",up);};
+  grip.addEventListener("mousedown",down);grip.addEventListener("touchstart",down,{passive:false});
+  return c;
+}
 
-const WORLD_W=2400, WORLD_H=1800;
+const WORLD_W=3200, WORLD_H=2400;
 function vpOf(pid){if(!db.viewports[pid])db.viewports[pid]={z:1,px:0,py:0};return db.viewports[pid];}
 function applyViewport(pid){const world=document.getElementById("world");if(!world)return;const v=vpOf(pid);
   world.style.transform=`translate(${v.px}px,${v.py}px) scale(${v.z})`;
   const cv=document.getElementById("canvas");if(cv)cv.classList.toggle("zoomed-out",v.z<0.6);}
-function setZoom(pid,z){const v=vpOf(pid);v.z=Math.max(0.3,Math.min(1.6,z));persist();
+function setZoom(pid,z){const v=vpOf(pid);v.z=Math.max(0.45,Math.min(1.6,z));persist();
   const inp=document.querySelector(".zoomctl input");if(inp)inp.value=Math.round(v.z*100);
   applyViewport(pid);drawArrows(pid);}
 function fitView(pid){const v=vpOf(pid);v.z=1;v.px=0;v.py=0;persist();applyViewport(pid);drawArrows(pid);
@@ -903,8 +1040,19 @@ function enableCanvasPanZoom(pid){
 function updateSelBar(){const bar=document.getElementById("selbar");if(!bar)return;
   bar.style.display=selected.size?"flex":"none";
   const c=document.getElementById("selcount");if(c)c.textContent=selected.size+" selected";}
-function bundleByCategory(pid){
-  const cats=liveCategories();let made=0;
+function pickAndUpload(pid,kind){
+  const inp=document.createElement("input");inp.type="file";
+  if(kind==="image")inp.accept="image/*";
+  inp.onchange=async()=>{const file=inp.files[0];if(!file)return;
+    if(file.size>10*1024*1024){alert("File too large (max 10MB).");return;}
+    const id=newNote(pid,kind,100,100,{filename:file.name,text:"uploading…"});render();
+    try{const url=await uploadFile(file);const n=db.notes[id];if(n){n.url=url;n.text=file.name;n.filename=file.name;touchNote(n);}}
+    catch(e){alert("Upload failed: "+e.message+"\nMake sure the 'chronicle' Storage bucket exists and is public.");
+      const n=db.notes[id];if(n){delNote(n);render();}}
+  };
+  inp.click();
+}
+function bundleByCategory(pid){  const cats=liveCategories();let made=0;
   cats.forEach(cat=>{
     const ids=tasksOf(pid).filter(t=>t.status!=="pending"&&t.category===cat.id&&!collapsedMember(t)).map(t=>t.id);
     if(ids.length>=2){const t0=db.tasks[ids[0]];newBundle(pid,cat.name,ids,t0.x,t0.y);made++;}
@@ -1362,6 +1510,44 @@ function renderWeek(){
   }
   app.replaceChildren(wrap);
 }
+function renderMonth(){
+  const cur=fromISO(db.cursorDate);const y=cur.getFullYear(),m=cur.getMonth();
+  const first=new Date(y,m,1);const startOff=(first.getDay()+6)%7; // Monday-first
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const wrap=document.createElement("div");wrap.className="timeline";wrap.style.maxWidth="1100px";
+  const head=document.createElement("div");head.className="week-head";
+  head.innerHTML=`<div class="nav"><button data-d="-1">‹</button><button data-d="1">›</button></div>
+    <h2>${first.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h2>
+    <button class="today-pill">this month</button>`;
+  head.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>{
+    db.cursorDate=toISO(new Date(y,m+(+b.dataset.d),1));render();}));
+  head.querySelector(".today-pill").addEventListener("click",()=>{db.cursorDate=todayISO();render();});
+  wrap.appendChild(head);
+  wrap.appendChild(catControlBar());
+  const grid=document.createElement("div");grid.className="month-grid";
+  const names=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  names.forEach(n=>{const h=document.createElement("div");h.className="month-dayname";h.textContent=n;grid.appendChild(h);});
+  // leading blanks
+  for(let i=0;i<startOff;i++){const c=document.createElement("div");c.className="month-cell empty";grid.appendChild(c);}
+  for(let d=1;d<=daysInMonth;d++){const iso=toISO(new Date(y,m,d));const cell=document.createElement("div");
+    cell.className="month-cell"+(iso===todayISO()?" is-today":"");
+    cell.innerHTML=`<div class="mc-date">${d}</div>`;
+    const items=applyCatControls(tasksForDate(iso));
+    const evs=eventsForDate(iso);
+    evs.slice(0,2).forEach(ev=>{const e=document.createElement("div");e.className="mc-item mc-evt";
+      e.textContent=ev.start+" "+ev.title;e.addEventListener("click",()=>openEvent(ev.id));cell.appendChild(e);});
+    items.slice(0,3).forEach(({t,p})=>{const e=document.createElement("div");e.className="mc-item"+(t.status==="done"?" done":"");
+      e.style.borderLeftColor=p.color;e.textContent=(t.due_time?t.due_time+" ":"")+t.text;
+      e.addEventListener("click",()=>openTask(t.id));cell.appendChild(e);});
+    const extra=(items.length-3)+(evs.length-2);
+    const more=(items.length>3?items.length-3:0)+(evs.length>2?evs.length-2:0);
+    if(more>0){const e=document.createElement("div");e.className="mc-more";e.textContent="+"+more+" more";
+      e.addEventListener("click",()=>{db.cursorDate=iso;db.view="day";render();});cell.appendChild(e);}
+    cell.querySelector(".mc-date").addEventListener("click",()=>{db.cursorDate=iso;db.view="day";render();});
+    grid.appendChild(cell);}
+  wrap.appendChild(grid);
+  app.replaceChildren(wrap);
+}
 function esc(s){return(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 document.querySelectorAll(".views button").forEach(b=>b.addEventListener("click",()=>{db.openProject=null;db.view=b.dataset.view;render();}));
@@ -1381,7 +1567,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v5";
+  const sw=`const C="chronicle-v6";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("fetch",e=>{
