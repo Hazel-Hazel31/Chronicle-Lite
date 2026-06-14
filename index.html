@@ -6,17 +6,26 @@
 <meta name="theme-color" content="#23201b">
 <title>Chronicle</title>
 <link rel="manifest" id="manifestLink">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --paper:#f3efe6;--paper-deep:#e9e3d6;--ink:#23201b;--graphite:#6f685c;
-    --hair:#cdc5b4;--done:#9aae9a;--live:#d98a2b;--live-soft:#f6e4c8;
-    --upcoming:#b7ab93;--danger:#b1493a;--card:#fbf9f3;--shadow:rgba(35,32,27,0.10);
+    --paper:#f7f8fa;--paper-deep:#eef0f3;--ink:#1a1d21;--graphite:#6b7280;
+    --hair:#e3e6ea;--done:#5dcaa5;--live:#e08a1e;--live-soft:#fcf3e2;
+    --upcoming:#b9c0c7;--danger:#c0392b;--card:#ffffff;--shadow:rgba(20,23,28,0.07);
+    --soon:#5b8fc9;
     --mono:"SFMono-Regular",ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  [data-theme="dark"]{
+    --paper:#15171a;--paper-deep:#1c1f23;--ink:#e8eaed;--graphite:#9aa0a6;
+    --hair:#2c3035;--done:#1d9e75;--live:#e08a1e;--live-soft:#3a2f1a;
+    --upcoming:#5f6671;--danger:#e24b4a;--card:#1e2125;--shadow:rgba(0,0,0,0.3);
+    --soon:#5b8fc9;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;}
-  body{background:repeating-linear-gradient(0deg,transparent 0 27px,rgba(35,32,27,0.025) 27px 28px),var(--paper);
+  body{background:var(--paper);
     color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.45;}
   header.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:16px;padding:12px 22px;
     background:rgba(243,239,230,0.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--hair);}
@@ -307,6 +316,21 @@
   .ua-card .assign{font-family:var(--mono);font-size:11px;border:1px solid var(--hair);border-radius:6px;background:var(--card);color:var(--graphite);}
   .ua-card .ua-del{border:none;background:none;color:var(--hair);font-size:15px;cursor:pointer;}
   .ua-card .ua-del:hover{color:var(--danger);}
+
+  .impseg{display:flex;gap:6px;}
+  .impseg button{flex:1;font-family:var(--mono);font-size:11px;border:1px solid var(--hair);background:var(--card);
+    border-radius:8px;padding:8px;cursor:pointer;color:var(--graphite);}
+  .impseg button.on[data-i="low"]{background:var(--graphite);color:#fff;border-color:var(--graphite);}
+  .impseg button.on[data-i="med"]{background:var(--live);color:#fff;border-color:var(--live);}
+  .impseg button.on[data-i="high"]{background:var(--danger);color:#fff;border-color:var(--danger);}
+  .impdot{position:absolute;top:9px;right:9px;width:9px;height:9px;border-radius:50%;}
+  .impdot.low{background:transparent;border:1.5px solid var(--upcoming);}
+  .ccard .impdot{top:9px;right:26px;}
+  .task .urg-edge{position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
+  .day-add .time-in{max-width:120px;}
+  .day-add button{margin-left:0;}
+  .day-add{gap:8px;flex-wrap:wrap;}
+  #evBtnSpacer{flex-basis:100%;height:0;}
   .hint{font-family:var(--mono);font-size:11px;color:var(--graphite);margin-top:14px;text-align:center;}
   .banner{max-width:760px;margin:0 auto 16px;background:var(--live-soft);border:1px solid var(--live);border-radius:10px;
     padding:10px 14px;font-size:13px;color:var(--ink);display:none;}
@@ -324,6 +348,7 @@
   </nav>
   <div class="spacer"></div>
   <div class="sync" id="syncPill"><span class="led"></span><span id="syncText">starting</span></div>
+  <button class="iconbtn" id="themeBtn" title="Toggle dark mode">◐</button>
   <button class="iconbtn" id="installBtn">Install</button>
 </header>
 <div class="banner" id="cfgBanner"></div>
@@ -355,6 +380,27 @@ function toISO(d){const z=new Date(d.getTime()-d.getTimezoneOffset()*60000);retu
 function fromISO(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);}
 function addDays(iso,n){const d=fromISO(iso);d.setDate(d.getDate()+n);return toISO(d);}
 function fmtLong(iso){return fromISO(iso).toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});}
+// urgency derived from a task's due date: overdue/today, soon(<=2d), later(<=7d), calm
+function urgencyOf(t){
+  if(!t.date||t.status==="done")return "calm";
+  const today=fromISO(todayISO()), due=fromISO(t.date);
+  const days=Math.round((due-today)/86400000);
+  if(days<=0)return "over";
+  if(days<=2)return "urgent";
+  if(days<=7)return "soon";
+  return "calm";
+}
+const URG_COLOR={over:"#c0392b",urgent:"#e08a1e",soon:"#5b8fc9",calm:"#e3e6ea"};
+const IMP_COLOR={high:"#c0392b",med:"#e08a1e",low:""};
+function urgencyLabel(t){
+  if(!t.date)return "";
+  const today=fromISO(todayISO()), due=fromISO(t.date);
+  const days=Math.round((due-today)/86400000);
+  if(days<0)return "overdue "+(-days)+"d";
+  if(days===0)return "today";
+  if(days===1)return "tomorrow";
+  return "in "+days+"d";
+}
 
 function emptyLocal(){return{projects:{},tasks:{},categories:{},arrows:{},events:{},view:"projects",cursorDate:todayISO(),openProject:null,calMode:"calendar",catFilter:[],catSort:false,lastPull:0};}
 let db=loadLocal();
@@ -440,7 +486,7 @@ function delProject(p){p.deleted=true;p.updated_at=now();tasksOf(p.id).forEach(t
   if(db.openProject===p.id){db.openProject=null;db.view="projects";}persist();render();pushSoon();}
 function newTask(pid,status,date,x,y){const id=uid();
   db.tasks[id]={id,project_id:pid,text:"New task",status:status||"upcoming",date:date||null,
-    category:"",location:"",notes:"",due_time:"",x:x??40,y:y??40,updated_at:now(),deleted:false};
+    category:"",location:"",notes:"",due_time:"",importance:"med",x:x??40,y:y??40,updated_at:now(),deleted:false};
   persist();render();pushSoon();return id;}
 function delTask(t){t.deleted=true;t.updated_at=now();persist();render();pushSoon();}
 
@@ -466,7 +512,7 @@ async function syncNow(){
       created:p.created??p.updated_at??now(),updated_at:p.updated_at??now(),deleted:!!p.deleted}));
     const tRows=Object.values(db.tasks).map(t=>({id:t.id,project_id:t.project_id??null,text:t.text??"",
       status:t.status??"upcoming",date:t.date??null,category:t.category??"",location:t.location??"",
-      notes:t.notes??"",due_time:t.due_time??"",x:Math.round(t.x??40),y:Math.round(t.y??40),
+      notes:t.notes??"",due_time:t.due_time??"",importance:t.importance??"med",x:Math.round(t.x??40),y:Math.round(t.y??40),
       updated_at:t.updated_at??now(),deleted:!!t.deleted}));
     await upsert("projects",pRows);
     await upsert("tasks",tRows);
@@ -590,9 +636,13 @@ function zone(stack,label,tasks,status,first){
   const lab=document.createElement("div");lab.className="zone-label"+(first?" first":"");lab.textContent=label;stack.appendChild(lab);
   if(!tasks.length){const ph=document.createElement("div");ph.className="task "+status;ph.style.opacity=".5";
     ph.style.fontStyle="italic";ph.style.cursor="default";ph.innerHTML=`<span class="label" style="font-size:12.5px">—</span>`;stack.appendChild(ph);return;}
-  tasks.forEach(t=>{const row=document.createElement("div");row.className="task "+status;
+  tasks.forEach(t=>{const row=document.createElement("div");row.className="task "+status;row.style.position="relative";
     const m=metaTag(t);
-    row.innerHTML=`<span class="tick"></span><span class="label"></span>${m?`<span class="meta-dot">${esc(m)}</span>`:""}`;
+    const u=urgencyOf(t);const edge=URG_COLOR[u]&&u!=="calm"?`<span class="urg-edge" style="background:${URG_COLOR[u]}"></span>`:"";
+    const imp=t.importance||"med";
+    const dot=imp==="low"?`<span class="impdot low" style="position:static;margin-left:auto"></span>`
+      :`<span class="impdot" style="position:static;margin-left:auto;background:${IMP_COLOR[imp]}"></span>`;
+    row.innerHTML=`${edge}<span class="tick"></span><span class="label"></span>${m?`<span class="meta-dot">${esc(m)}</span>`:""}${dot}`;
     row.querySelector(".label").textContent=t.text;
     row.querySelector(".tick").addEventListener("click",e=>{e.stopPropagation();cycle(t);});
     row.addEventListener("click",()=>openTask(t.id));
@@ -752,12 +802,14 @@ function cardEl(t,p){
   if(arrowFrom&&arrowFrom!=="_arm"&&arrowFrom!==t.id)c.classList.add("arrowtarget");
   if(arrowFrom===t.id)c.classList.add("arrowsource");
   const chips=[];
-  if(t.date)chips.push({t:t.date===todayISO()?"today":fromISO(t.date).toLocaleDateString(undefined,{day:'numeric',month:'short'})});
+  if(t.date){const u=urgencyOf(t);chips.push({t:urgencyLabel(t),c:URG_COLOR[u]==="#e3e6ea"?null:URG_COLOR[u]});}
   if(t.due_time)chips.push({t:t.due_time});
   if(t.category&&catById(t.category)&&!catById(t.category).deleted){const cat=catById(t.category);
     chips.push({t:cat.name,c:cat.color});}
   if(t.location)chips.push({t:"📍"+t.location});
-  c.innerHTML=`<div class="cstatus" title="cycle status"></div><div class="ct"></div>
+  const imp=t.importance||"med";
+  const dot=imp==="low"?`<span class="impdot low"></span>`:`<span class="impdot" style="background:${IMP_COLOR[imp]}"></span>`;
+  c.innerHTML=`<div class="cstatus" title="cycle status"></div>${dot}<div class="ct"></div>
     <div class="cmeta">${chips.map(ch=>ch.c
       ?`<span class="chip" style="background:${ch.c}22;color:${ch.c}">${esc(ch.t)}</span>`
       :`<span class="chip">${esc(ch.t)}</span>`).join("")}</div>`;
@@ -820,6 +872,8 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
       <div><label>Due date</label><input type="date" id="f_date" value="${t.date||""}"></div>
       <div><label>Time</label><input type="time" id="f_time" value="${t.due_time||""}"></div></div>
     <div class="field"><label>Category</label><select id="f_cat"><option value="">— none —</option>${liveCategories().map(c=>`<option ${c.id===(t.category||"")?"selected":""} value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
+    <div class="field"><label>Importance</label><div class="impseg" id="f_imp">
+      <button data-i="low">Low</button><button data-i="med">Medium</button><button data-i="high">High</button></div></div>
     <div class="field"><label>Location</label><input type="text" id="f_loc" placeholder="e.g. WIMM Room 305" value="${esc(t.location||"")}"></div>
     <div class="field"><label>Notes</label><textarea id="f_notes" placeholder="anything useful…">${esc(t.notes||"")}</textarea></div>
     <div class="foot" style="padding:0;border:none;margin-top:6px">
@@ -829,6 +883,9 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
   seg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{t.status=b.dataset.s;
     if(t.status==="live"&&!t.date){t.date=todayISO();const d=drawerBody.querySelector("#f_date");if(d)d.value=t.date;}
     paint();touchTaskQuiet(t);}));
+  const iseg=drawerBody.querySelector("#f_imp");
+  const ipaint=()=>iseg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.i===(t.importance||"med")));ipaint();
+  iseg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{t.importance=b.dataset.i;ipaint();touchTaskQuiet(t);}));
   const bind=(sel,prop,ev)=>{const el=drawerBody.querySelector(sel);el.addEventListener(ev||"input",()=>{t[prop]=el.value;touchTaskQuiet(t);});};
   bind("#f_text","text");bind("#f_date","date","change");bind("#f_time","due_time","change");
   bind("#f_cat","category","change");bind("#f_loc","location");bind("#f_notes","notes");
@@ -1052,7 +1109,7 @@ function dayAdder(iso){
   add.querySelector("button").addEventListener("click",go);
   input.addEventListener("keydown",e=>{if(e.key==="Enter")go();});
   const evBtn=document.createElement("button");evBtn.textContent="+ event";evBtn.style.background="var(--card)";
-  evBtn.style.color="var(--graphite)";evBtn.style.border="1px solid var(--hair)";
+  evBtn.style.color="var(--graphite)";evBtn.style.border="1px solid var(--hair)";evBtn.style.marginLeft="auto";
   evBtn.addEventListener("click",()=>{const id=newEvent(iso,"09:00","10:00",null);openEvent(id);});
   add.appendChild(evBtn);
   return add;
@@ -1155,15 +1212,35 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v2";self.addEventListener("install",e=>self.skipWaiting());
+  const sw=`const C="chronicle-v3";
+    self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
-    self.addEventListener("fetch",e=>{const u=new URL(e.request.url);if(u.hostname.endsWith("supabase.co"))return;
-      e.respondWith(caches.open(C).then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(net=>{if(e.request.method==="GET"&&net.ok)c.put(e.request,net.clone());return net;}).catch(()=>r))));});`;
-  navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:"text/javascript"}))).catch(()=>{});
+    self.addEventListener("fetch",e=>{
+      const u=new URL(e.request.url);
+      if(u.hostname.endsWith("supabase.co"))return;
+      if(e.request.method!=="GET")return;
+      // network-first: always try fresh, fall back to cache when offline
+      e.respondWith(
+        fetch(e.request).then(net=>{if(net&&net.ok){const cp=net.clone();caches.open(C).then(c=>c.put(e.request,cp));}return net;})
+        .catch(()=>caches.open(C).then(c=>c.match(e.request)))
+      );
+    });`;
+  navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:"text/javascript"}))).then(reg=>{
+    // when a new worker takes over, reload once to show the fresh version
+    let reloaded=false;
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{if(reloaded)return;reloaded=true;location.reload();});
+    setInterval(()=>reg.update(),60000);
+  }).catch(()=>{});
 }catch(e){}}
 
 /* ===== BOOT ===== */
+function applyTheme(){const th=localStorage.getItem("chronicle.theme")||"light";
+  document.documentElement.setAttribute("data-theme",th);}
+document.getElementById("themeBtn").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";
+  localStorage.setItem("chronicle.theme",cur);document.documentElement.setAttribute("data-theme",cur);});
 function boot(){
+  applyTheme();
   try{render();}catch(e){const b=document.getElementById("cfgBanner");b.style.display="block";
     b.textContent="Startup error: "+e.message;console.error(e);}
   setSync(navigator.onLine?"syncing":"offline",navigator.onLine?"syncing":"offline · saved locally");
