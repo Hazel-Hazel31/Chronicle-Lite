@@ -171,12 +171,19 @@
 
   .cnote{position:absolute;background:var(--card);border:1px solid var(--hair);border-radius:10px;z-index:3;
     box-shadow:0 6px 16px -10px var(--shadow);overflow:hidden;min-width:120px;}
+  /* text notes: invisible until hover/edit (PPT-style) */
+  .cnote.text{background:transparent;border:1px solid transparent;box-shadow:none;}
+  .cnote.text .note-bar{opacity:0;background:transparent;transition:opacity .12s;}
+  .cnote.text:hover{border-color:var(--hair);}
+  .cnote.text:hover .note-bar{opacity:1;}
+  .cnote.text .note-text:focus{outline:1px dashed var(--live);outline-offset:2px;}
   .cnote .note-bar{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:var(--paper-deep);}
   .cnote .note-grip{cursor:grab;color:var(--graphite);font-size:12px;user-select:none;}
   .cnote .note-del{border:none;background:none;cursor:pointer;color:var(--graphite);font-size:15px;line-height:1;}
   .cnote .note-del:hover{color:var(--danger);}
   .cnote.dragging{opacity:.9;z-index:7;}
   .note-text{padding:9px 11px;font-size:13px;outline:none;min-height:40px;white-space:pre-wrap;word-break:break-word;}
+  .note-text:empty:before{content:attr(data-ph);color:var(--graphite);opacity:.5;}
   .note-link{display:block;padding:9px 11px;font-size:13px;color:var(--soon);text-decoration:none;word-break:break-all;}
   .note-link:hover{text-decoration:underline;}
   .note-img{display:block;width:100%;height:auto;}
@@ -494,19 +501,26 @@ function migrateOrSeed(){
         s.calMode=s.calMode||"calendar";s.catFilter=[];s.catSort=false;return s;}
     }catch(e){}
   }
-  return seed();
+  // IMPORTANT: do NOT seed here. Starting empty prevents duplicate example
+  // projects/categories from piling up every time local storage is cleared.
+  return emptyLocal();
 }
-function seed(){
-  const s=emptyLocal();const pid=uid();
-  s.projects[pid]={id:pid,name:"Example project",color:PALETTE[1],created:now(),updated_at:now(),deleted:false};
-  ["Lab"].forEach((n,i)=>{const id=uid();
-    s.categories[id]={id,name:n,color:CATCOLORS[i%CATCOLORS.length],updated_at:now(),deleted:false};});
-  const mk=(text,status,date,x,y)=>{const id=uid();s.tasks[id]={id,project_id:pid,text,status,date,
-    category:"",location:"",notes:"",due_time:"",x,y,updated_at:now(),deleted:false};return id;};
+// One-time example, only if the database is truly empty after first sync,
+// and only once ever (guarded by a permanent flag).
+function maybeSeedExample(){
+  try{if(localStorage.getItem("chronicle.seeded"))return;}catch(e){}
+  const empty=Object.keys(db.projects).length===0&&Object.keys(db.tasks).length===0;
+  if(!empty)return;
+  const pid=uid();
+  db.projects[pid]={id:pid,name:"Example project",color:PALETTE[1],created:now(),updated_at:now(),deleted:false};
+  const cid=uid();db.categories[cid]={id:cid,name:"Lab",color:CATCOLORS[0],updated_at:now(),deleted:false};
+  const mk=(text,status,date,x,y)=>{const id=uid();db.tasks[id]={id,project_id:pid,text,status,date,
+    category:"",location:"",notes:"",due_time:"",importance:"med",x,y,updated_at:now(),deleted:false};};
   mk("Order antibodies","done",null,150,40);
   mk("Run BN-PAGE gel","live",todayISO(),420,210);
   mk("Draft methods section","upcoming",null,160,420);
-  return s;
+  try{localStorage.setItem("chronicle.seeded","1");}catch(e){}
+  persist();render();pushSoon();
 }
 function persist(){try{localStorage.setItem(LKEY,JSON.stringify(db));}catch(e){}}
 
@@ -519,8 +533,12 @@ const catById=id=>db.categories[id];
 const arrowsOf=pid=>{const ids=new Set(tasksOf(pid).map(t=>t.id));
   return Object.values(db.arrows).filter(a=>!a.deleted&&ids.has(a.from)&&ids.has(a.to));};
 
-function newCategory(name,color){const id=uid();
-  db.categories[id]={id,name:name||"New",color:color||CATCOLORS[liveCategories().length%CATCOLORS.length],
+function newCategory(name,color){
+  const nm=(name||"New").trim();
+  const existing=liveCategories().find(c=>c.name.toLowerCase()===nm.toLowerCase());
+  if(existing)return existing.id; // no duplicates by name
+  const id=uid();
+  db.categories[id]={id,name:nm,color:color||CATCOLORS[liveCategories().length%CATCOLORS.length],
     updated_at:now(),deleted:false};persist();pushSoon();return id;}
 function delCategory(c){c.deleted=true;c.updated_at=now();
   // unset this category on any task using it
@@ -603,7 +621,7 @@ function newTask(pid,status,date,x,y){const id=uid();
 function delTask(t){t.deleted=true;t.updated_at=now();persist();render();pushSoon();}
 
 /* ===== SYNC (unchanged engine) ===== */
-let syncState="starting",pushTimer=null;
+let syncState="starting",pushTimer=null,syncedOnce=false;
 function setSync(s,msg){syncState=s;const pill=document.getElementById("syncPill");
   pill.className="sync "+s;document.getElementById("syncText").textContent=msg||s;}
 function pushSoon(){clearTimeout(pushTimer);pushTimer=setTimeout(syncNow,800);}
@@ -664,6 +682,7 @@ async function syncNow(){
     db.lastPull=maxTs;persist();
     if(changed&&!dragging)render();
     setSync("online","synced");
+    if(!syncedOnce){syncedOnce=true;maybeSeedExample();}
   }catch(e){console.error(e);setSync("error","sync error · saved locally");}
 }
 window.addEventListener("online",()=>{setSync("syncing","reconnecting");syncNow();});
@@ -826,7 +845,7 @@ function renderDetail(){
   const catBundleBtn=document.createElement("button");catBundleBtn.textContent="bundle by category";
   catBundleBtn.addEventListener("click",()=>bundleByCategory(p.id));
   const textBtn=document.createElement("button");textBtn.textContent="+ text";
-  textBtn.addEventListener("click",()=>{newNote(p.id,"text",100,100,{text:"Note…"});render();});
+  textBtn.addEventListener("click",()=>{newNote(p.id,"text",100,100,{text:""});render();});
   const linkBtn=document.createElement("button");linkBtn.textContent="+ link";
   linkBtn.addEventListener("click",()=>{const url=prompt("Link URL");if(url){const label=prompt("Label (optional)",url)||url;
     newNote(p.id,"link",100,100,{url,text:label});render();}});
@@ -859,12 +878,12 @@ function renderDetail(){
   world.appendChild(svg);
 
   const allPlaced=tasks.filter(t=>t.status!=="pending");
-  const collapsedBundleIds=new Set();bundlesOf(p.id).filter(b=>b.collapsed).forEach(b=>(b.task_ids||[]).forEach(id=>collapsedBundleIds.add(id)));
+  const bundledIds=new Set();bundlesOf(p.id).forEach(b=>(b.task_ids||[]).forEach(id=>bundledIds.add(id)));
   const pending=tasks.filter(t=>t.status==="pending");
   if(!allPlaced.length&&!bundlesOf(p.id).length){const e=document.createElement("div");e.className="canvas-empty";
     e.innerHTML=`<div>No cards on the board yet</div><div>Use “+ add card”, or drag one in from the inbox →</div>`;world.appendChild(e);}
   bundlesOf(p.id).forEach(b=>world.appendChild(bundleEl(b,p)));
-  allPlaced.forEach(t=>{if(collapsedBundleIds.has(t.id))return;world.appendChild(cardEl(t,p));});
+  allPlaced.forEach(t=>{if(bundledIds.has(t.id))return;world.appendChild(cardEl(t,p));});
   eventsOfProject(p.id).forEach((ev,i)=>world.appendChild(eventCardEl(ev,i)));
   notesOf(p.id).forEach(n=>world.appendChild(noteEl(n,p)));
 
@@ -988,7 +1007,8 @@ function noteEl(n,p){
   else if(n.kind==="image"){inner=`<img class="note-img" src="${esc(n.url)}" alt="">`;}
   else if(n.kind==="file"){inner=`<a class="note-file" href="${esc(n.url)}" target="_blank" rel="noopener">📎 <span></span></a>`;}
   c.innerHTML=`<div class="note-bar"><span class="note-grip">⠿</span><button class="note-del">×</button></div>${inner}`;
-  if(n.kind==="text"){const te=c.querySelector(".note-text");te.textContent=n.text||"Note…";
+  if(n.kind==="text"){const te=c.querySelector(".note-text");te.textContent=n.text||"";
+    te.setAttribute("data-ph","Type…");
     te.addEventListener("blur",()=>{n.text=te.textContent;touchNote(n);});}
   if(n.kind==="link"){const a=c.querySelector(".note-link");a.textContent=n.text||n.url;}
   if(n.kind==="file"){c.querySelector(".note-file span").textContent=n.filename||"file";}
@@ -1567,7 +1587,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v6";
+  const sw=`const C="chronicle-v7";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("fetch",e=>{
