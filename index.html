@@ -453,6 +453,14 @@
 </style>
 </head>
 <body>
+<div id="loginGate" style="display:none;position:fixed;inset:0;background:var(--paper,#fff);z-index:500;align-items:center;justify-content:center;padding:24px;">
+  <div style="max-width:340px;width:100%;text-align:center;">
+    <div style="font-size:24px;font-weight:600;margin-bottom:6px;">Chronicle<span style="color:#d98a2b">.</span></div>
+    <div id="loginMsg" style="font-size:13px;color:#666;margin-bottom:18px;">Sign in to sync your planner. We'll email you a one-tap link.</div>
+    <input type="email" id="loginEmail" placeholder="your email" style="width:100%;padding:12px;border:1px solid #ccc;border-radius:9px;font-size:15px;margin-bottom:10px;box-sizing:border-box;">
+    <button id="loginBtn" style="width:100%;padding:12px;background:#1a1a1a;color:#fff;border:none;border-radius:9px;font-size:15px;cursor:pointer;">Email me a sign-in link</button>
+  </div>
+</div>
 <header class="topbar">
   <div class="brand" id="brandHome">Chronicle<span class="dot">.</span><small>lite</small></div>
   <nav class="views">
@@ -477,6 +485,7 @@
   <div class="body" id="drawerBody"></div>
 </aside>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
 
@@ -484,7 +493,12 @@
 const SUPABASE_URL="https://tiyhksoqoyzgfzbpaovg.supabase.co";
 const SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpeWhrc29xb3l6Z2Z6YnBhb3ZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MzQzMDIsImV4cCI6MjA5NzAxMDMwMn0.tqbmxFaTzauwJSJCDXDa9dUdTs9lfFxwYOKEhCR91hU";
 const REST=SUPABASE_URL+"/rest/v1";
-const HEADERS={"apikey":SUPABASE_ANON,"Authorization":"Bearer "+SUPABASE_ANON,"Content-Type":"application/json"};
+// auth client (magic-link). Session persists across refreshes automatically.
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+let AUTH_TOKEN=SUPABASE_ANON, USER_ID=null;
+// HEADERS reflects the current logged-in token on every access (so RLS applies)
+function authHeaders(){return {"apikey":SUPABASE_ANON,"Authorization":"Bearer "+AUTH_TOKEN,"Content-Type":"application/json"};}
+const HEADERS=new Proxy({},{get:(_,k)=>authHeaders()[k],ownKeys:()=>Reflect.ownKeys(authHeaders()),getOwnPropertyDescriptor:()=>({enumerable:true,configurable:true})});
 
 /* ===== LOCAL STORE ===== */
 const LKEY="totem.sync.v3";
@@ -668,7 +682,7 @@ async function enablePush(){
     try{
       const r=await fetch(REST+"/push_subscriptions",{method:"POST",
         headers:{...HEADERS,"Prefer":"resolution=merge-duplicates,return=minimal"},
-        body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,
+        body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,user_id:USER_ID,
           on_do:db.notif.onDo,on_due:db.notif.onDue,lead_days:db.notif.lead,updated_at:now()}])});
       if(!r.ok){alert("Enabled on this device, but saving to server failed ("+r.status+"). Test should still work. Detail: "+(await r.text()).slice(0,120));}
       else{alert("Notifications enabled and saved to server. Try the test button.");}
@@ -684,7 +698,7 @@ async function syncPushPrefs(){
     if(!sub)return;const j=sub.toJSON();
     await fetch(REST+"/push_subscriptions",{method:"POST",
       headers:{...HEADERS,"Prefer":"resolution=merge-duplicates,return=minimal"},
-      body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,
+      body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,user_id:USER_ID,
         on_do:db.notif.onDo,on_due:db.notif.onDue,lead_days:db.notif.lead,updated_at:now()}])});
   }catch(e){}
 }
@@ -728,32 +742,34 @@ async function pull(table,since){
   if(!res.ok)throw new Error(table+" pull "+res.status+" "+(await res.text()).slice(0,160));
   return res.json();}
 async function syncNow(){
+  if(!USER_ID){return;} // not logged in yet — don't sync
   if(!navigator.onLine){setSync("offline","offline · saved locally");return;}
   try{
     setSync("syncing","syncing");
-    const pRows=Object.values(db.projects).map(p=>({id:p.id,name:p.name??"",color:p.color??"#888",
+    const U=USER_ID;
+    const pRows=Object.values(db.projects).map(p=>({id:p.id,user_id:U,name:p.name??"",color:p.color??"#888",
       created:p.created??p.updated_at??now(),updated_at:p.updated_at??now(),deleted:!!p.deleted}));
-    const tRows=Object.values(db.tasks).map(t=>({id:t.id,project_id:t.project_id??null,text:t.text??"",
+    const tRows=Object.values(db.tasks).map(t=>({id:t.id,user_id:U,project_id:t.project_id??null,text:t.text??"",
       status:t.status??"upcoming",date:t.date??null,do_date:t.do_date??null,do_end:t.do_end??"",sessions:JSON.stringify(t.sessions||[]),category:t.category??"",location:t.location??"",
       notes:t.notes??"",due_time:t.due_time??"",importance:t.importance??"med",done_at:t.done_at??null,x:Math.round(t.x??40),y:Math.round(t.y??40),
       updated_at:t.updated_at??now(),deleted:!!t.deleted}));
     await upsert("projects",pRows);
     await upsert("tasks",tRows);
-    const cRows=Object.values(db.categories).map(c=>({id:c.id,name:c.name??"",color:c.color??"#888",
+    const cRows=Object.values(db.categories).map(c=>({id:c.id,user_id:U,name:c.name??"",color:c.color??"#888",
       updated_at:c.updated_at??now(),deleted:!!c.deleted}));
-    const aRows=Object.values(db.arrows).map(a=>({id:a.id,project_id:a.project_id??null,
+    const aRows=Object.values(db.arrows).map(a=>({id:a.id,user_id:U,project_id:a.project_id??null,
       from_id:a.from,to_id:a.to,updated_at:a.updated_at??now(),deleted:!!a.deleted}));
-    const eRows=Object.values(db.events).map(e=>({id:e.id,title:e.title??"",date:e.date??null,
+    const eRows=Object.values(db.events).map(e=>({id:e.id,user_id:U,title:e.title??"",date:e.date??null,
       start:e.start??"09:00",end:e.end??"10:00",project_id:e.project_id??null,location:e.location??"",
       notes:e.notes??"",x:Math.round(e.x??40),y:Math.round(e.y??40),updated_at:e.updated_at??now(),deleted:!!e.deleted}));
     await upsert("categories",cRows);
     await upsert("arrows",aRows);
     await upsert("events",eRows);
-    const bRows=Object.values(db.bundles).map(b=>({id:b.id,project_id:b.project_id??null,name:b.name??"",
+    const bRows=Object.values(db.bundles).map(b=>({id:b.id,user_id:U,project_id:b.project_id??null,name:b.name??"",
       task_ids:JSON.stringify(b.task_ids||[]),collapsed:!!b.collapsed,x:Math.round(b.x??60),y:Math.round(b.y??60),
       w:Math.round(b.w??280),h:Math.round(b.h??200),updated_at:b.updated_at??now(),deleted:!!b.deleted}));
     await upsert("bundles",bRows);
-    const nRows=Object.values(db.notes).map(n=>({id:n.id,project_id:n.project_id??null,kind:n.kind??"text",
+    const nRows=Object.values(db.notes).map(n=>({id:n.id,user_id:U,project_id:n.project_id??null,kind:n.kind??"text",
       text:n.text??"",url:n.url??"",filename:n.filename??"",x:Math.round(n.x??80),y:Math.round(n.y??80),
       w:Math.round(n.w??220),h:Math.round(n.h??120),updated_at:n.updated_at??now(),deleted:!!n.deleted}));
     await upsert("notes",nRows);
@@ -1935,14 +1951,54 @@ document.getElementById("resetBtn").addEventListener("click",async()=>{  if(!con
   db=emptyLocal();db.lastPull=0;persist();
   location.reload();
 });
-function boot(){
+/* ===== AUTH ===== */
+function showLogin(msg){
+  const g=document.getElementById("loginGate");g.style.display="flex";
+  if(msg)document.getElementById("loginMsg").textContent=msg;}
+function hideLogin(){document.getElementById("loginGate").style.display="none";}
+document.getElementById("loginBtn").addEventListener("click",async()=>{
+  const email=document.getElementById("loginEmail").value.trim();
+  if(!email||!email.includes("@")){alert("Enter a valid email.");return;}
+  const btn=document.getElementById("loginBtn");btn.textContent="Sending…";btn.disabled=true;
+  const{error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.href.split("#")[0]}});
+  btn.disabled=false;btn.textContent="Email me a sign-in link";
+  if(error){alert("Couldn't send link: "+error.message);return;}
+  document.getElementById("loginMsg").textContent="Check your email and tap the link. You can close this once you're in.";
+});
+async function startSession(session){
+  AUTH_TOKEN=session.access_token;USER_ID=session.user.id;
+  hideLogin();
+  if(!window._booted){window._booted=true;runApp();}
+  else if(navigator.onLine)syncNow();
+}
+function addLogoutButton(){
+  if(document.getElementById("logoutBtn"))return;
+  const b=document.createElement("button");b.className="iconbtn";b.id="logoutBtn";b.title="Sign out";b.textContent="⏻";
+  b.addEventListener("click",async()=>{if(!confirm("Sign out? Your data stays synced; you'll need the email link to sign back in."))return;
+    await sb.auth.signOut();location.reload();});
+  document.querySelector(".topbar").appendChild(b);
+}
+
+/* ===== BOOT ===== */
+function runApp(){
   applyTheme();
   try{render();}catch(e){const b=document.getElementById("cfgBanner");b.style.display="block";
     b.textContent="Startup error: "+e.message;console.error(e);}
   setSync(navigator.onLine?"syncing":"offline",navigator.onLine?"syncing":"offline · saved locally");
-  buildManifest();registerSW();
+  buildManifest();registerSW();addLogoutButton();
   if(navigator.onLine)syncNow();
-  setInterval(()=>{if(navigator.onLine&&syncState!=="syncing"&&!dragging&&!editingTaskId)syncNow();},30000);
+  setInterval(()=>{if(USER_ID&&navigator.onLine&&syncState!=="syncing"&&!dragging&&!editingTaskId)syncNow();},30000);
+}
+async function boot(){
+  applyTheme(); // theme before any paint
+  // react to auth state (initial load, magic-link return, sign-out)
+  sb.auth.onAuthStateChange((_event,session)=>{
+    if(session){startSession(session);}
+    else{USER_ID=null;AUTH_TOKEN=SUPABASE_ANON;}
+  });
+  const{data}=await sb.auth.getSession();
+  if(data&&data.session){startSession(data.session);}
+  else{showLogin();}
 }
 boot();
 </script>
