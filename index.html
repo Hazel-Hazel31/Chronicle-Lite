@@ -653,26 +653,30 @@ async function enablePush(){
     if(!("Notification"in window)){alert("Step fail: no Notification API.");return false;}
     const perm=await Notification.requestPermission();
     if(perm!=="granted"){alert("Permission not granted (got: "+perm+").");return false;}
-    const reg=await navigator.serviceWorker.ready;
+    // make sure a service worker is actually registered (ready can hang forever if not)
+    const reg=await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("service worker not ready (timed out). The app's service worker may not be registered — try a hard refresh.")),6000))
+    ]);
+    if(!reg||!reg.pushManager){alert("Step fail: no pushManager on registration.");return false;}
     let sub=await reg.pushManager.getSubscription();
     if(!sub){
       sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToUint8(VAPID_PUBLIC)});
     }
-    // we have a subscription → notifications can work locally. Mark enabled now.
     db.notif.enabled=true;persist();
-    // try to save to Supabase so the server can send while app is closed
     const j=sub.toJSON();
     try{
       const r=await fetch(REST+"/push_subscriptions",{method:"POST",
         headers:{...HEADERS,"Prefer":"resolution=merge-duplicates,return=minimal"},
         body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,
           on_do:db.notif.onDo,on_due:db.notif.onDue,lead_days:db.notif.lead,updated_at:now()}])});
-      if(!r.ok){alert("Enabled on phone, but saving to server failed ("+r.status+"). Background pushes may not work yet, but the test should. Detail: "+(await r.text()).slice(0,120));}
+      if(!r.ok){alert("Enabled on this device, but saving to server failed ("+r.status+"). Test should still work. Detail: "+(await r.text()).slice(0,120));}
+      else{alert("Notifications enabled and saved to server. Try the test button.");}
     }catch(saveErr){
-      alert("Enabled on phone, but couldn't reach the server to save the subscription: "+saveErr.message);
+      alert("Enabled on this device, but couldn't reach the server: "+saveErr.message);
     }
     return true;
-  }catch(e){alert("Couldn't enable push at step: "+(e&&e.message?e.message:e));return false;}
+  }catch(e){alert("Couldn't enable push: "+(e&&e.message?e.message:e));return false;}
 }
 async function syncPushPrefs(){
   if(!db.notif.enabled)return;
@@ -1862,7 +1866,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v17";
+  const sw=`const C="chronicle-v18";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("push",e=>{
