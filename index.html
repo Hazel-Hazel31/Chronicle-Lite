@@ -205,6 +205,27 @@
   .mc-item.mc-evt{background:rgba(122,108,174,0.13);border-left-color:#7a6cae;color:#3c3489;}
   .mc-more{font-family:var(--mono);font-size:9.5px;color:var(--graphite);cursor:pointer;padding-left:5px;}
   .mc-more:hover{color:var(--live);}
+  /* do/due zones + project tags */
+  .mc-zone{font-family:var(--mono);font-size:8px;letter-spacing:0.5px;margin:3px 0 1px;}
+  .mc-zone.doing{color:#0F6E56;}
+  .mc-zone.due{color:#A32D2D;}
+  .mc-item.doing{background:#1D9E75;border:none;color:#fff;display:flex;flex-direction:column;}
+  .mc-item.duemark{background:#FCEBEB;border:1.5px solid #E24B4A;color:#A32D2D;font-weight:500;display:flex;flex-direction:column;}
+  .mc-proj{display:flex;align-items:center;gap:3px;font-size:8px;opacity:0.92;}
+  .mc-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto;}
+  .mc-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .w-zone{font-family:var(--mono);font-size:9px;letter-spacing:0.5px;margin:6px 0 2px;}
+  .w-zone.doing{color:#0F6E56;}.w-zone.due{color:#A32D2D;}
+  .wtask.doing{background:#1D9E75;color:#fff;border-left:none;display:flex;flex-direction:column;gap:1px;}
+  .wtask.duemark{background:#FCEBEB;border:1.5px solid #E24B4A;color:#A32D2D;font-weight:500;border-left:1.5px solid #E24B4A;display:flex;flex-direction:column;gap:1px;}
+  .wt-proj{display:flex;align-items:center;gap:3px;font-size:9px;opacity:0.9;}
+  .agenda-zone{font-family:var(--mono);font-size:10px;letter-spacing:1px;margin:14px 0 4px;padding-left:2px;}
+  .agenda-zone.doing{color:#0F6E56;}.agenda-zone.due{color:#A32D2D;}
+  .agenda-kind{font-family:var(--mono);font-size:12px;margin-right:2px;}
+  .agenda-kind.doing{color:#0F6E56;}.agenda-kind.duemark{color:#A32D2D;}
+  .agenda-row.duemark{background:#FCEBEB;}
+  .ad-chip.doing{background:#1D9E75;color:#fff;display:inline-flex;align-items:center;gap:4px;border-left:none;}
+  .ad-chip.duemark{background:#FCEBEB;border:1.5px solid #E24B4A;color:#A32D2D;font-weight:500;display:inline-flex;align-items:center;gap:4px;}
   .canvas-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
     gap:10px;color:var(--graphite);font-family:var(--mono);font-size:13px;pointer-events:none;z-index:1;}
 
@@ -616,7 +637,7 @@ function newProject(){const id=uid();db.projects[id]={id,name:"New project",
 function delProject(p){p.deleted=true;p.updated_at=now();tasksOf(p.id).forEach(t=>{t.deleted=true;t.updated_at=now();});
   if(db.openProject===p.id){db.openProject=null;db.view="projects";}persist();render();pushSoon();}
 function newTask(pid,status,date,x,y){const id=uid();
-  db.tasks[id]={id,project_id:pid,text:"New task",status:status||"upcoming",date:date||null,
+  db.tasks[id]={id,project_id:pid,text:"New task",status:status||"upcoming",date:date||null,do_date:null,
     category:"",location:"",notes:"",due_time:"",importance:"med",x:x??40,y:y??40,updated_at:now(),deleted:false};
   persist();render();pushSoon();return id;}
 function delTask(t){t.deleted=true;t.updated_at=now();persist();render();pushSoon();}
@@ -642,7 +663,7 @@ async function syncNow(){
     const pRows=Object.values(db.projects).map(p=>({id:p.id,name:p.name??"",color:p.color??"#888",
       created:p.created??p.updated_at??now(),updated_at:p.updated_at??now(),deleted:!!p.deleted}));
     const tRows=Object.values(db.tasks).map(t=>({id:t.id,project_id:t.project_id??null,text:t.text??"",
-      status:t.status??"upcoming",date:t.date??null,category:t.category??"",location:t.location??"",
+      status:t.status??"upcoming",date:t.date??null,do_date:t.do_date??null,category:t.category??"",location:t.location??"",
       notes:t.notes??"",due_time:t.due_time??"",importance:t.importance??"med",done_at:t.done_at??null,x:Math.round(t.x??40),y:Math.round(t.y??40),
       updated_at:t.updated_at??now(),deleted:!!t.deleted}));
     await upsert("projects",pRows);
@@ -1239,8 +1260,9 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
     <div class="field"><label>Status</label><div class="statusseg" id="f_status">
       <button data-s="upcoming">Upcoming</button><button data-s="live">Now</button><button data-s="done">Done</button></div></div>
     <div class="field row2">
-      <div><label>Due date</label><input type="date" id="f_date" value="${t.date||""}"></div>
-      <div><label>Time</label><input type="time" id="f_time" value="${t.due_time||""}"></div></div>
+      <div><label>▶ Do date (when you'll work on it)</label><input type="date" id="f_do" value="${t.do_date||""}"></div>
+      <div><label>⚑ Due date (deadline)</label><input type="date" id="f_date" value="${t.date||""}"></div></div>
+    <div class="field"><label>Time (for do-date block)</label><input type="time" id="f_time" value="${t.due_time||""}"></div>
     <div class="field"><label>Category</label><select id="f_cat"><option value="">— none —</option>${liveCategories().map(c=>`<option ${c.id===(t.category||"")?"selected":""} value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Importance</label><div class="impseg" id="f_imp">
       <button data-i="low">Low</button><button data-i="med">Medium</button><button data-i="high">High</button></div></div>
@@ -1258,7 +1280,7 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
   const ipaint=()=>iseg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.i===(t.importance||"med")));ipaint();
   iseg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{t.importance=b.dataset.i;ipaint();touchTaskQuiet(t);}));
   const bind=(sel,prop,ev)=>{const el=drawerBody.querySelector(sel);el.addEventListener(ev||"input",()=>{t[prop]=el.value;touchTaskQuiet(t);});};
-  bind("#f_text","text");bind("#f_date","date","change");bind("#f_time","due_time","change");
+  bind("#f_text","text");bind("#f_date","date","change");bind("#f_do","do_date","change");bind("#f_time","due_time","change");
   bind("#f_cat","category","change");bind("#f_loc","location");bind("#f_notes","notes");
   drawerBody.querySelector("#f_del").addEventListener("click",()=>{closeDrawer();delTask(t);});
   drawerBody.querySelector("#f_done").addEventListener("click",closeDrawer);
@@ -1331,7 +1353,16 @@ function openEvent(id){editingEventId=id;editingTaskId=null;const e=eventById(id
   document.querySelector(".drawer header b").textContent="Event";
   drawer.classList.add("open");drawerBack.style.display="block";
 }
-function tasksForDate(iso){const out=[];liveProjects().forEach(p=>tasksOf(p.id).forEach(t=>{if(t.date===iso&&t.status!=="pending")out.push({t,p});}));
+function tasksForDate(iso){const out=[];liveProjects().forEach(p=>tasksOf(p.id).forEach(t=>{
+  if(t.status==="pending")return;
+  // a task appears on a date if EITHER its do_date or its due date matches
+  if(t.do_date===iso||t.date===iso)out.push({t,p});}));
+  return out.sort((a,b)=>(a.t.due_time||"99").localeCompare(b.t.due_time||"99"));}
+function doingForDate(iso){const out=[];liveProjects().forEach(p=>tasksOf(p.id).forEach(t=>{
+  if(t.status!=="pending"&&t.do_date===iso)out.push({t,p});}));
+  return out.sort((a,b)=>(a.t.due_time||"99").localeCompare(b.t.due_time||"99"));}
+function dueForDate(iso){const out=[];liveProjects().forEach(p=>tasksOf(p.id).forEach(t=>{
+  if(t.status!=="pending"&&t.date===iso)out.push({t,p});}));
   return out.sort((a,b)=>(a.t.due_time||"99").localeCompare(b.t.due_time||"99"));}
 const HOUR_PX=60, DAY_START=7, DAY_END=22; // 7am–10pm grid
 function modeToggle(){
@@ -1402,29 +1433,33 @@ function renderDay(){
   wrap.appendChild(head);
   wrap.appendChild(catControlBar());
 
-  let rows=applyCatControls(tasksForDate(iso));
+  const doing=applyCatControls(doingForDate(iso));const due=applyCatControls(dueForDate(iso));
   if((db.calMode||"calendar")==="list"){
-    if(!rows.length){const e=document.createElement("div");e.className="empty";
-      e.textContent="Nothing scheduled. Add below, or give a task a due date.";wrap.appendChild(e);}
-    else{rows.slice().sort((a,b)=>(a.t.status==="done")-(b.t.status==="done")).forEach(({t,p})=>{
-      const r=document.createElement("div");r.className="agenda-row"+(t.status==="done"?" done":"");
-      r.innerHTML=`<span class="proj-chip" style="background:${p.color}">${esc(p.name)}</span>
-        <span class="a-tick"></span><span class="a-label"></span>${t.due_time?`<span class="a-time">${t.due_time}</span>`:""}`;
-      r.querySelector(".a-label").textContent=t.text;
-      r.querySelector(".a-tick").addEventListener("click",e=>{e.stopPropagation();setStatus(t,t.status==="done"?"live":"done");touchTask(t);});
-      r.addEventListener("click",()=>openTask(t.id));wrap.appendChild(r);});
-      // events in list mode too
+    if(!doing.length&&!due.length&&!eventsForDate(iso).length){const e=document.createElement("div");e.className="empty";
+      e.textContent="Nothing scheduled. Add below, or set a do-date / due date.";wrap.appendChild(e);}
+    else{
+      const rowFor=(t,p,kind)=>{const r=document.createElement("div");r.className="agenda-row "+kind+(t.status==="done"?" done":"");
+        r.innerHTML=`<span class="agenda-kind ${kind}">${kind==="doing"?"▶":"⚑"}</span>
+          <span class="proj-chip" style="background:${p.color}">${esc(p.name)}</span>
+          <span class="a-tick"></span><span class="a-label"></span>${t.due_time&&kind==="doing"?`<span class="a-time">${t.due_time}</span>`:""}`;
+        r.querySelector(".a-label").textContent=t.text;
+        r.querySelector(".a-tick").addEventListener("click",e=>{e.stopPropagation();setStatus(t,t.status==="done"?"live":"done");touchTask(t);});
+        r.addEventListener("click",()=>openTask(t.id));return r;};
+      if(doing.length){const l=document.createElement("div");l.className="agenda-zone doing";l.textContent="▶ DOING TODAY";wrap.appendChild(l);
+        doing.forEach(({t,p})=>wrap.appendChild(rowFor(t,p,"doing")));}
+      if(due.length){const l=document.createElement("div");l.className="agenda-zone due";l.textContent="⚑ DUE TODAY";wrap.appendChild(l);
+        due.forEach(({t,p})=>wrap.appendChild(rowFor(t,p,"duemark")));}
       eventsForDate(iso).forEach(ev=>{const r=document.createElement("div");r.className="agenda-row event-row";
         r.innerHTML=`<span class="proj-chip evt">EVENT</span><span class="a-tick" style="visibility:hidden"></span>
           <span class="a-label"></span><span class="a-time">${ev.start}–${ev.end}</span>`;
         r.querySelector(".a-label").textContent=ev.title;r.addEventListener("click",()=>openEvent(ev.id));wrap.appendChild(r);});}
   } else {
-    wrap.appendChild(dayGrid(iso,rows));
+    wrap.appendChild(dayGrid(iso,doing,due));
   }
   wrap.appendChild(dayAdder(iso));
   app.replaceChildren(wrap);
 }
-function dayGrid(iso,rows){
+function dayGrid(iso,rows,due){
   const timed=rows.filter(r=>r.t.due_time);
   const allday=rows.filter(r=>!r.t.due_time);
   const evs=eventsForDate(iso);
@@ -1432,9 +1467,12 @@ function dayGrid(iso,rows){
   const ad=document.createElement("div");ad.className="allday";
   ad.innerHTML=`<div class="ad-label">all-day</div><div class="ad-items"></div>`;
   const adi=ad.querySelector(".ad-items");
-  if(!allday.length)adi.innerHTML=`<span class="ad-empty">—</span>`;
-  allday.forEach(({t,p})=>{const c=document.createElement("div");c.className="ad-chip"+(t.status==="done"?" done":"");
-    c.style.borderLeftColor=p.color;c.textContent=t.text;c.title=p.name;
+  if(!allday.length&&!(due&&due.length))adi.innerHTML=`<span class="ad-empty">—</span>`;
+  allday.forEach(({t,p})=>{const c=document.createElement("div");c.className="ad-chip doing"+(t.status==="done"?" done":"");
+    c.style.borderLeftColor=p.color;c.innerHTML=`<span class="mc-dot" style="background:${p.color}"></span>▶ ${esc(t.text)}`;c.title=p.name;
+    c.addEventListener("click",()=>openTask(t.id));adi.appendChild(c);});
+  (due||[]).forEach(({t,p})=>{const c=document.createElement("div");c.className="ad-chip duemark"+(t.status==="done"?" done":"");
+    c.innerHTML=`<span class="mc-dot" style="background:${p.color}"></span>⚑ ${esc(t.text)}`;c.title=p.name+" — due";
     c.addEventListener("click",()=>openTask(t.id));adi.appendChild(c);});
   cal.appendChild(ad);
   const grid=document.createElement("div");grid.className="hourgrid";
@@ -1498,16 +1536,24 @@ function renderWeek(){
   wrap.appendChild(head);
   wrap.appendChild(catControlBar());
   const names=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-  const dayRows=iso=>applyCatControls(tasksForDate(iso));
+  const dayRows=iso=>applyCatControls(doingForDate(iso));
+  const dueRows=iso=>applyCatControls(dueForDate(iso));
 
   if((db.calMode||"calendar")==="list"){
     const grid=document.createElement("div");grid.className="week-grid";
     for(let i=0;i<7;i++){const iso=addDays(start,i);const col=document.createElement("div");
       col.className="wday"+(iso===todayISO()?" is-today":"");
       col.innerHTML=`<h4><span>${names[i]}</span><b>${fromISO(iso).getDate()}</b></h4>`;
-      dayRows(iso).forEach(({t,p})=>{const tt=document.createElement("div");tt.className="wtask"+(t.status==="done"?" done":"");
-        tt.style.borderLeftColor=p.color;tt.textContent=(t.due_time?t.due_time+" ":"")+t.text;tt.title=p.name;
-        tt.addEventListener("click",()=>openTask(t.id));col.appendChild(tt);});
+      const doing=applyCatControls(doingForDate(iso));const due=applyCatControls(dueForDate(iso));
+      const tag=(p)=>`<span class="wt-proj"><span class="mc-dot" style="background:${p.color}"></span>${esc(p.name)}</span>`;
+      if(doing.length){const l=document.createElement("div");l.className="w-zone doing";l.textContent="▶ DOING";col.appendChild(l);
+        doing.forEach(({t,p})=>{const tt=document.createElement("div");tt.className="wtask doing"+(t.status==="done"?" done":"");
+          tt.innerHTML=tag(p)+`<span>${(t.due_time?t.due_time+" ":"")+esc(t.text)}</span>`;
+          tt.addEventListener("click",()=>openTask(t.id));col.appendChild(tt);});}
+      if(due.length){const l=document.createElement("div");l.className="w-zone due";l.textContent="⚑ DUE";col.appendChild(l);
+        due.forEach(({t,p})=>{const tt=document.createElement("div");tt.className="wtask duemark"+(t.status==="done"?" done":"");
+          tt.innerHTML=tag(p)+`<span>${esc(t.text)}</span>`;
+          tt.addEventListener("click",()=>openTask(t.id));col.appendChild(tt);});}
       eventsForDate(iso).forEach(ev=>{const tt=document.createElement("div");tt.className="wtask wevt";
         tt.textContent=ev.start+" "+ev.title;tt.addEventListener("click",()=>openEvent(ev.id));col.appendChild(tt);});
       grid.appendChild(col);}
@@ -1524,7 +1570,12 @@ function renderWeek(){
     adrow.innerHTML=`<div class="wc-adlabel">all-day</div>`;
     for(let i=0;i<7;i++){const iso=addDays(start,i);const cell=document.createElement("div");cell.className="wc-adcell";
       dayRows(iso).filter(r=>!r.t.due_time).forEach(({t,p})=>{const c=document.createElement("div");
-        c.className="ad-chip"+(t.status==="done"?" done":"");c.style.borderLeftColor=p.color;c.textContent=t.text;c.title=p.name;
+        c.className="ad-chip doing"+(t.status==="done"?" done":"");c.style.borderLeftColor=p.color;
+        c.innerHTML=`<span class="mc-dot" style="background:${p.color}"></span>▶ ${esc(t.text)}`;c.title=p.name;
+        c.addEventListener("click",()=>openTask(t.id));cell.appendChild(c);});
+      dueRows(iso).forEach(({t,p})=>{const c=document.createElement("div");
+        c.className="ad-chip duemark"+(t.status==="done"?" done":"");
+        c.innerHTML=`<span class="mc-dot" style="background:${p.color}"></span>⚑ ${esc(t.text)}`;c.title=p.name+" — due";
         c.addEventListener("click",()=>openTask(t.id));cell.appendChild(c);});
       adrow.appendChild(cell);}
     cal.appendChild(adrow);
@@ -1586,15 +1637,21 @@ function renderMonth(){
   for(let d=1;d<=daysInMonth;d++){const iso=toISO(new Date(y,m,d));const cell=document.createElement("div");
     cell.className="month-cell"+(iso===todayISO()?" is-today":"");
     cell.innerHTML=`<div class="mc-date">${d}</div>`;
-    const items=applyCatControls(tasksForDate(iso));
     const evs=eventsForDate(iso);
-    evs.slice(0,2).forEach(ev=>{const e=document.createElement("div");e.className="mc-item mc-evt";
+    const doing=applyCatControls(doingForDate(iso));
+    const due=applyCatControls(dueForDate(iso));
+    evs.slice(0,1).forEach(ev=>{const e=document.createElement("div");e.className="mc-item mc-evt";
       e.textContent=ev.start+" "+ev.title;e.addEventListener("click",()=>openEvent(ev.id));cell.appendChild(e);});
-    items.slice(0,3).forEach(({t,p})=>{const e=document.createElement("div");e.className="mc-item"+(t.status==="done"?" done":"");
-      e.style.borderLeftColor=p.color;e.textContent=(t.due_time?t.due_time+" ":"")+t.text;
-      e.addEventListener("click",()=>openTask(t.id));cell.appendChild(e);});
-    const extra=(items.length-3)+(evs.length-2);
-    const more=(items.length>3?items.length-3:0)+(evs.length>2?evs.length-2:0);
+    const projTag=(p)=>`<span class="mc-proj"><span class="mc-dot" style="background:${p.color}"></span>${esc(p.name)}</span>`;
+    if(doing.length){const lab=document.createElement("div");lab.className="mc-zone doing";lab.textContent="▶ DOING";cell.appendChild(lab);
+      doing.slice(0,2).forEach(({t,p})=>{const e=document.createElement("div");e.className="mc-item doing"+(t.status==="done"?" done":"");
+        e.innerHTML=projTag(p)+`<span class="mc-txt">${(t.due_time?t.due_time+" ":"")+esc(t.text)}</span>`;
+        e.addEventListener("click",()=>openTask(t.id));cell.appendChild(e);});}
+    if(due.length){const lab=document.createElement("div");lab.className="mc-zone due";lab.textContent="⚑ DUE";cell.appendChild(lab);
+      due.slice(0,2).forEach(({t,p})=>{const e=document.createElement("div");e.className="mc-item duemark"+(t.status==="done"?" done":"");
+        e.innerHTML=projTag(p)+`<span class="mc-txt">${esc(t.text)}</span>`;
+        e.addEventListener("click",()=>openTask(t.id));cell.appendChild(e);});}
+    const more=Math.max(0,doing.length-2)+Math.max(0,due.length-2);
     if(more>0){const e=document.createElement("div");e.className="mc-more";e.textContent="+"+more+" more";
       e.addEventListener("click",()=>{db.cursorDate=iso;db.view="day";render();});cell.appendChild(e);}
     cell.querySelector(".mc-date").addEventListener("click",()=>{db.cursorDate=iso;db.view="day";render();});
@@ -1621,7 +1678,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v11";
+  const sw=`const C="chronicle-v12";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("fetch",e=>{
