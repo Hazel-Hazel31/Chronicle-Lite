@@ -647,24 +647,32 @@ function urlB64ToUint8(base64){
   const raw=atob(b64);const arr=new Uint8Array(raw.length);
   for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);return arr;}
 async function enablePush(){
-  if(!("serviceWorker"in navigator)||!("PushManager"in window)){
-    alert("Push isn't supported in this browser. On iPhone, install the app to your home screen first.");return false;}
-  const perm=await Notification.requestPermission();
-  if(perm!=="granted"){alert("Notification permission was not granted.");return false;}
   try{
+    if(!("serviceWorker"in navigator)){alert("Step fail: no service worker support.");return false;}
+    if(!("PushManager"in window)){alert("Step fail: no PushManager. On iPhone you must install to home screen.");return false;}
+    if(!("Notification"in window)){alert("Step fail: no Notification API.");return false;}
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){alert("Permission not granted (got: "+perm+").");return false;}
     const reg=await navigator.serviceWorker.ready;
     let sub=await reg.pushManager.getSubscription();
-    if(!sub){sub=await reg.pushManager.subscribe({userVisibleOnly:true,
-      applicationServerKey:urlB64ToUint8(VAPID_PUBLIC)});}
-    // store the subscription in Supabase so the server function can send to it
-    const j=sub.toJSON();
-    await fetch(REST+"/push_subscriptions",{method:"POST",
-      headers:{...HEADERS,"Prefer":"resolution=merge-duplicates,return=minimal"},
-      body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,
-        on_do:db.notif.onDo,on_due:db.notif.onDue,lead_days:db.notif.lead,updated_at:now()}])});
+    if(!sub){
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToUint8(VAPID_PUBLIC)});
+    }
+    // we have a subscription → notifications can work locally. Mark enabled now.
     db.notif.enabled=true;persist();
+    // try to save to Supabase so the server can send while app is closed
+    const j=sub.toJSON();
+    try{
+      const r=await fetch(REST+"/push_subscriptions",{method:"POST",
+        headers:{...HEADERS,"Prefer":"resolution=merge-duplicates,return=minimal"},
+        body:JSON.stringify([{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,
+          on_do:db.notif.onDo,on_due:db.notif.onDue,lead_days:db.notif.lead,updated_at:now()}])});
+      if(!r.ok){alert("Enabled on phone, but saving to server failed ("+r.status+"). Background pushes may not work yet, but the test should. Detail: "+(await r.text()).slice(0,120));}
+    }catch(saveErr){
+      alert("Enabled on phone, but couldn't reach the server to save the subscription: "+saveErr.message);
+    }
     return true;
-  }catch(e){alert("Couldn't enable push: "+e.message);return false;}
+  }catch(e){alert("Couldn't enable push at step: "+(e&&e.message?e.message:e));return false;}
 }
 async function syncPushPrefs(){
   if(!db.notif.enabled)return;
@@ -1854,7 +1862,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v16";
+  const sw=`const C="chronicle-v17";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("push",e=>{
