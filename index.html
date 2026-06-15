@@ -351,6 +351,8 @@
     padding:3px 8px;font-size:12px;cursor:pointer;min-height:22px;overflow:hidden;}
   .event b{font-family:var(--mono);font-size:11px;}
   .event.done{text-decoration:line-through;opacity:.65;}
+  .event.hasdur,.wc-event.hasdur{align-items:flex-start;display:block;}
+  .event.hasdur b,.wc-event.hasdur b{display:block;margin-bottom:2px;}
   .nowline{position:absolute;left:0;right:0;height:2px;background:var(--danger);z-index:5;}
   .nowline::before{content:"";position:absolute;left:0;top:-3px;width:7px;height:7px;border-radius:50%;background:var(--danger);}
 
@@ -679,7 +681,7 @@ function newProject(){const id=uid();db.projects[id]={id,name:"New project",
 function delProject(p){p.deleted=true;p.updated_at=now();tasksOf(p.id).forEach(t=>{t.deleted=true;t.updated_at=now();});
   if(db.openProject===p.id){db.openProject=null;db.view="projects";}persist();render();pushSoon();}
 function newTask(pid,status,date,x,y){const id=uid();
-  db.tasks[id]={id,project_id:pid,text:"New task",status:status||"upcoming",date:date||null,do_date:null,
+  db.tasks[id]={id,project_id:pid,text:"New task",status:status||"upcoming",date:date||null,do_date:null,do_end:"",
     category:"",location:"",notes:"",due_time:"",importance:"med",x:x??40,y:y??40,updated_at:now(),deleted:false};
   persist();render();pushSoon();return id;}
 function delTask(t){t.deleted=true;t.updated_at=now();persist();render();pushSoon();}
@@ -705,7 +707,7 @@ async function syncNow(){
     const pRows=Object.values(db.projects).map(p=>({id:p.id,name:p.name??"",color:p.color??"#888",
       created:p.created??p.updated_at??now(),updated_at:p.updated_at??now(),deleted:!!p.deleted}));
     const tRows=Object.values(db.tasks).map(t=>({id:t.id,project_id:t.project_id??null,text:t.text??"",
-      status:t.status??"upcoming",date:t.date??null,do_date:t.do_date??null,category:t.category??"",location:t.location??"",
+      status:t.status??"upcoming",date:t.date??null,do_date:t.do_date??null,do_end:t.do_end??"",category:t.category??"",location:t.location??"",
       notes:t.notes??"",due_time:t.due_time??"",importance:t.importance??"med",done_at:t.done_at??null,x:Math.round(t.x??40),y:Math.round(t.y??40),
       updated_at:t.updated_at??now(),deleted:!!t.deleted}));
     await upsert("projects",pRows);
@@ -1304,7 +1306,9 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
     <div class="field row2">
       <div><label>▶ Do date (when you'll work on it)</label><input type="date" id="f_do" value="${t.do_date||""}"></div>
       <div><label>⚑ Due date (deadline)</label><input type="date" id="f_date" value="${t.date||""}"></div></div>
-    <div class="field"><label>Time (for do-date block)</label><input type="time" id="f_time" value="${t.due_time||""}"></div>
+    <div class="field row2">
+      <div><label>Do time (start)</label><input type="time" id="f_time" value="${t.due_time||""}"></div>
+      <div><label>Finish (optional)</label><input type="time" id="f_doend" value="${t.do_end||""}"></div></div>
     <div class="field"><label>Category</label><select id="f_cat"><option value="">— none —</option>${liveCategories().map(c=>`<option ${c.id===(t.category||"")?"selected":""} value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
     <div class="field"><label>Importance</label><div class="impseg" id="f_imp">
       <button data-i="low">Low</button><button data-i="med">Medium</button><button data-i="high">High</button></div></div>
@@ -1322,7 +1326,7 @@ function openTask(id){editingTaskId=id;const t=taskById(id);if(!t)return;
   const ipaint=()=>iseg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.i===(t.importance||"med")));ipaint();
   iseg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{t.importance=b.dataset.i;ipaint();touchTaskQuiet(t);}));
   const bind=(sel,prop,ev)=>{const el=drawerBody.querySelector(sel);el.addEventListener(ev||"input",()=>{t[prop]=el.value;touchTaskQuiet(t);});};
-  bind("#f_text","text");bind("#f_date","date","change");bind("#f_do","do_date","change");bind("#f_time","due_time","change");
+  bind("#f_text","text");bind("#f_date","date","change");bind("#f_do","do_date","change");bind("#f_time","due_time","change");bind("#f_doend","do_end","change");
   bind("#f_cat","category","change");bind("#f_loc","location");bind("#f_notes","notes");
   drawerBody.querySelector("#f_del").addEventListener("click",()=>{closeDrawer();delTask(t);});
   drawerBody.querySelector("#f_done").addEventListener("click",closeDrawer);
@@ -1538,11 +1542,20 @@ function dayGrid(iso,rows,due){
     grid.appendChild(block);});
   // timed tasks
   timed.forEach(({t,p})=>{const mins=minutesOf(t);const top=(mins-DAY_START*60)/60*HOUR_PX;
-    const ev=document.createElement("div");ev.className="event"+(t.status==="done"?" done":"");
+    const endM=t.do_end?hm(t.do_end):0;
+    const hasDur=t.do_end&&endM>mins;
+    const h=hasDur?Math.max(22,(endM-mins)/60*HOUR_PX):0;
+    const ev=document.createElement("div");ev.className="event"+(t.status==="done"?" done":"")+(hasDur?" hasdur":"");
     ev.style.top=Math.max(0,top)+"px";ev.style.borderLeftColor=p.color;ev.style.background=p.color+"1a";
-    ev.innerHTML=`<b>${t.due_time}</b> ${esc(t.text)}`;ev.title=p.name;
+    if(hasDur)ev.style.height=h+"px";
+    ev.innerHTML=hasDur
+      ?`<b>${t.due_time}–${t.do_end}</b> ${esc(t.text)}`
+      :`<b>${t.due_time}</b> ${esc(t.text)}`;
+    ev.title=p.name;
     ev._click=()=>openTask(t.id);
-    enableTimeDrag(ev,mins,60,HOUR_PX/60,(newStart)=>{t.due_time=minsToTime(newStart);touchTask(t);});
+    enableTimeDrag(ev,mins,hasDur?(endM-mins):60,HOUR_PX/60,(newStart)=>{
+      if(hasDur){const dur=endM-mins;t.due_time=minsToTime(newStart);t.do_end=minsToTime(newStart+dur);}
+      else t.due_time=minsToTime(newStart);touchTask(t);});
     grid.appendChild(ev);});
   cal.appendChild(grid);
   return cal;
@@ -1642,11 +1655,15 @@ function renderWeek(){
         col.appendChild(block);});
       dayRows(iso).filter(r=>r.t.due_time).forEach(({t,p})=>{const mins=minutesOf(t);
         const top=(mins-DAY_START*60)/60*HOUR_PX;const ev=document.createElement("div");
-        ev.className="wc-event"+(t.status==="done"?" done":"");ev.style.top=Math.max(0,top)+"px";
+        const endM=t.do_end?hm(t.do_end):0;const hasDur=t.do_end&&endM>mins;
+        ev.className="wc-event"+(t.status==="done"?" done":"")+(hasDur?" hasdur":"");ev.style.top=Math.max(0,top)+"px";
         ev.style.borderLeftColor=p.color;ev.style.background=p.color+"1a";
-        ev.innerHTML=`<b>${t.due_time}</b> ${esc(t.text)}`;ev.title=p.name;
+        if(hasDur)ev.style.height=Math.max(18,(endM-mins)/60*HOUR_PX)+"px";
+        ev.innerHTML=hasDur?`<b>${t.due_time}–${t.do_end}</b> ${esc(t.text)}`:`<b>${t.due_time}</b> ${esc(t.text)}`;ev.title=p.name;
         ev._click=()=>openTask(t.id);
-        enableTimeDrag(ev,mins,60,HOUR_PX/60,(newStart)=>{t.due_time=minsToTime(newStart);touchTask(t);});
+        enableTimeDrag(ev,mins,hasDur?(endM-mins):60,HOUR_PX/60,(newStart)=>{
+          if(hasDur){const dur=endM-mins;t.due_time=minsToTime(newStart);t.do_end=minsToTime(newStart+dur);}
+          else t.due_time=minsToTime(newStart);touchTask(t);});
         col.appendChild(ev);});
       if(iso===todayISO()){const d=new Date();const mins=d.getHours()*60+d.getMinutes();
         if(mins>=DAY_START*60&&mins<=DAY_END*60){const nl=document.createElement("div");nl.className="nowline";
@@ -1720,7 +1737,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v13";
+  const sw=`const C="chronicle-v14";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("push",e=>{
