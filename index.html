@@ -1854,7 +1854,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v15";
+  const sw=`const C="chronicle-v16";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("push",e=>{
@@ -1918,9 +1918,21 @@ function openNotifSettings(){
   drawerBody.querySelector("#n_due").addEventListener("change",e=>{db.notif.onDue=e.target.checked;persist();syncPushPrefs();});
   drawerBody.querySelector("#n_lead").addEventListener("change",e=>{db.notif.lead=+e.target.value;persist();syncPushPrefs();});
   drawerBody.querySelector("#n_test").addEventListener("click",async()=>{
-    if(Notification.permission!=="granted"){alert("Enable notifications first.");return;}
-    const reg=await navigator.serviceWorker.ready;
-    reg.showNotification("Chronicle Lite",{body:"Test notification — this is how reminders will look.",icon:""});});
+    try{
+      if(!("Notification"in window)){alert("This browser has no Notification support.");return;}
+      if(Notification.permission!=="granted"){
+        const p=await Notification.requestPermission();
+        if(p!=="granted"){alert("Notification permission is not granted (currently: "+Notification.permission+").");return;}
+      }
+      if(!("serviceWorker"in navigator)){alert("No service worker support.");return;}
+      const reg=await navigator.serviceWorker.ready;
+      await reg.showNotification("Chronicle Lite",{
+        body:"Test notification — this is how reminders will look.",
+        tag:"chronicle-test",
+        requireInteraction:false
+      });
+    }catch(err){alert("Test failed: "+(err&&err.message?err.message:err));}
+  });
   document.querySelector(".drawer header b").textContent="Notifications";
   drawer.classList.add("open");drawerBack.style.display="block";
 }
