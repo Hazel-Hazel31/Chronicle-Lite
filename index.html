@@ -1120,9 +1120,17 @@ function drawArrows(pid){const svg=document.getElementById("arrowlayer");if(!svg
     const c2={x:te.offsetLeft+te.offsetWidth/2,y:te.offsetTop+te.offsetHeight/2};
     const start=edgePoint(c1,c2,ce.offsetWidth/2,ce.offsetHeight/2);
     const end=edgePoint(c2,c1,te.offsetWidth/2+3,te.offsetHeight/2+3);
-    const mx=(start.x+end.x)/2;
+    const adx=Math.abs(c2.x-c1.x),ady=Math.abs(c2.y-c1.y);
+    let d;
+    if(ady>=adx){ // mostly vertical: curve arrives vertically so the head points up/down
+      const my=(start.y+end.y)/2;
+      d=`M ${start.x} ${start.y} C ${start.x} ${my}, ${end.x} ${my}, ${end.x} ${end.y}`;
+    } else { // mostly horizontal
+      const mx=(start.x+end.x)/2;
+      d=`M ${start.x} ${start.y} C ${mx} ${start.y}, ${mx} ${end.y}, ${end.x} ${end.y}`;
+    }
     const path=document.createElementNS("http://www.w3.org/2000/svg","path");
-    path.setAttribute("d",`M ${start.x} ${start.y} C ${mx} ${start.y}, ${mx} ${end.y}, ${end.x} ${end.y}`);
+    path.setAttribute("d",d);
     path.setAttribute("class","arrow");path.setAttribute("fill","none");
     path.setAttribute("stroke","#7a746a");path.setAttribute("stroke-width","2");
     path.setAttribute("marker-end","url(#ah)");path.style.pointerEvents="stroke";path.style.cursor="pointer";
@@ -1613,7 +1621,7 @@ function buildManifest(){try{
 function registerSW(){try{
   if(!("serviceWorker"in navigator))return;
   if(location.protocol!=="https:"&&location.hostname!=="localhost")return;
-  const sw=`const C="chronicle-v10";
+  const sw=`const C="chronicle-v11";
     self.addEventListener("install",e=>self.skipWaiting());
     self.addEventListener("activate",e=>self.clients.claim());
     self.addEventListener("fetch",e=>{
