@@ -1,7 +1,13 @@
-const C = "meridian-v32";
+const C = "meridian-v33";
 
 self.addEventListener("install", e => self.skipWaiting());
-self.addEventListener("activate", e => self.clients.claim());
+self.addEventListener("activate", e => {
+  e.waitUntil(
+    caches.keys()
+      .then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
 
 self.addEventListener("push", e => {
   let data = { title: "Meridian", body: "Reminder" };
