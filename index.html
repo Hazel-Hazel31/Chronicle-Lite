@@ -2129,28 +2129,43 @@ function renderWeek(){
       col.style.height=((DAY_END-DAY_START)*HOUR_PX)+"px";
       for(let h=DAY_START;h<=DAY_END;h++){const ln=document.createElement("div");ln.className="wc-hline";
         ln.style.top=((h-DAY_START)*HOUR_PX)+"px";col.appendChild(ln);}
-      // events behind tasks
-      eventsForDate(iso).forEach(ev=>{const sm=hm(ev.start),em=hm(ev.end);const top=(sm-DAY_START*60)/60*HOUR_PX;
-        const hh=Math.max(18,(em-sm)/60*HOUR_PX);const block=document.createElement("div");block.className="wc-eventblock";
-        block.style.top=Math.max(0,top)+"px";block.style.height=hh+"px";
-        block.innerHTML=`<b>${ev.start}</b>${esc(ev.title)}`;block._click=()=>openEvent(ev.id);
-        enableTimeDrag(block,sm,em-sm,HOUR_PX/60,(newStart)=>{const dur=em-sm;
-          ev.start=minsToTime(newStart);ev.end=minsToTime(newStart+dur);touchEvent(ev);});
-        col.appendChild(block);});
-      dayRows(iso).filter(r=>r.start).forEach(({t,p,start,end})=>{const mins=hm(start);
-        const top=(mins-DAY_START*60)/60*HOUR_PX;const ev=document.createElement("div");
-        const endM=end?hm(end):0;const hasDur=end&&endM>mins;
-        ev.className="wc-event"+(t.status==="done"?" done":"")+(hasDur?" hasdur":"");ev.style.top=Math.max(0,top)+"px";
-        ev.style.borderLeftColor=p.color;ev.style.background=p.color+"1a";
-        if(hasDur)ev.style.height=Math.max(18,(endM-mins)/60*HOUR_PX)+"px";
-        ev.innerHTML=hasDur?`<b>${start}–${end}</b> ${esc(t.text)}`:`<b>${start}</b> ${esc(t.text)}`;ev.title=p.name;
-        ev._click=()=>openTask(t.id);
-        enableTimeDrag(ev,mins,hasDur?(endM-mins):60,HOUR_PX/60,(newStart)=>{
-          const ns=minsToTime(newStart);const sess=(t.sessions||[]).find(s=>s.date===iso&&s.start===start);
-          if(sess){sess.start=ns;if(hasDur)sess.end=minsToTime(newStart+(endM-mins));}
-          else{t.due_time=ns;if(hasDur)t.do_end=minsToTime(newStart+(endM-mins));}
-          touchTask(t);});
-        col.appendChild(ev);});
+      // collect timed blocks for this day column, pack overlaps side-by-side
+      const wblocks=[];
+      eventsForDate(iso).forEach(ev=>{const sm=hm(ev.start),em=Math.max(hm(ev.end),sm+15);
+        wblocks.push({kind:"event",sm,em,ev});});
+      dayRows(iso).filter(r=>r.start).forEach(({t,p,start,end})=>{const sm=hm(start);
+        const em=end&&hm(end)>sm?hm(end):sm+30;
+        wblocks.push({kind:"task",sm,em,t,p,start,end,hasDur:!!(end&&hm(end)>sm)});});
+      packOverlaps(wblocks).forEach(blk=>{
+        const top=(blk.sm-DAY_START*60)/60*HOUR_PX;
+        const gw=100/blk.cols, leftPct=blk.col*gw;
+        const leftCss="calc(2px + (100% - 4px) * "+(leftPct/100)+")";
+        const widthCss="calc((100% - 4px) * "+(gw/100)+" - 2px)";
+        if(blk.kind==="event"){const ev=blk.ev;const hh=Math.max(18,(blk.em-blk.sm)/60*HOUR_PX);
+          const block=document.createElement("div");block.className="wc-eventblock"+(isPastEvent(ev)?" past":"");
+          block.style.top=Math.max(0,top)+"px";block.style.height=hh+"px";
+          block.style.left=leftCss;block.style.width=widthCss;block.style.right="auto";
+          block.innerHTML=`<b>${ev.start}</b>${esc(ev.title)}`;block._click=()=>openEvent(ev.id);
+          enableTimeDrag(block,blk.sm,blk.em-blk.sm,HOUR_PX/60,(newStart)=>{const dur=hm(ev.end)-hm(ev.start);
+            ev.start=minsToTime(newStart);ev.end=minsToTime(newStart+dur);touchEvent(ev);});
+          col.appendChild(block);
+        } else {
+          const {t,p,start,end,hasDur}=blk;
+          const ev=document.createElement("div");
+          ev.className="wc-event"+(t.status==="done"?" done":"")+(hasDur?" hasdur":"")+(isOverdue(t)?" overdue":"");
+          ev.style.top=Math.max(0,top)+"px";ev.style.borderLeftColor=p.color;ev.style.background=p.color+"1a";
+          ev.style.left=leftCss;ev.style.width=widthCss;ev.style.right="auto";
+          if(hasDur)ev.style.height=Math.max(18,(blk.em-blk.sm)/60*HOUR_PX)+"px";
+          ev.innerHTML=hasDur?`<b>${start}–${end}</b> ${esc(t.text)}`:`<b>${start}</b> ${esc(t.text)}`;ev.title=p.name;
+          ev._click=()=>openTask(t.id);
+          enableTimeDrag(ev,blk.sm,hasDur?(blk.em-blk.sm):60,HOUR_PX/60,(newStart)=>{
+            const ns=minsToTime(newStart);const sess=(t.sessions||[]).find(s=>s.date===iso&&s.start===start);
+            if(sess){sess.start=ns;if(hasDur)sess.end=minsToTime(newStart+(hm(end)-hm(start)));}
+            else{t.due_time=ns;if(hasDur)t.do_end=minsToTime(newStart+(hm(end)-hm(start)));}
+            touchTask(t);});
+          col.appendChild(ev);
+        }
+      });
       if(iso===todayISO()){const d=new Date();const mins=d.getHours()*60+d.getMinutes();
         if(mins>=DAY_START*60&&mins<=DAY_END*60){const nl=document.createElement("div");nl.className="nowline";
           nl.style.top=((mins-DAY_START*60)/60*HOUR_PX)+"px";col.appendChild(nl);}}
